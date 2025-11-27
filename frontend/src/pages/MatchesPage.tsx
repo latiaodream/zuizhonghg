@@ -419,8 +419,80 @@ const MatchesPage: React.FC = () => {
                 const scoreLabel = m.score || m.current_score || '';
 	                const markets = m.markets || {};
 
-	                const fullHdp = markets.full?.handicapLines || (markets.handicap ? [markets.handicap] : []);
-	                const fullOu = markets.full?.overUnderLines || (markets.ou ? [markets.ou] : []);
+	                // 从 moreMarkets.game[] 提取盘口线并带上 gid
+	                const extractLinesFromMoreMarkets = (moreMarkets: any) => {
+	                  const handicapLines: any[] = [];
+	                  const overUnderLines: any[] = [];
+	                  const halfHandicapLines: any[] = [];
+	                  const halfOverUnderLines: any[] = [];
+	                  if (!moreMarkets?.game) return { handicapLines, overUnderLines, halfHandicapLines, halfOverUnderLines };
+	                  const games = Array.isArray(moreMarkets.game) ? moreMarkets.game : [moreMarkets.game];
+	                  for (const game of games) {
+	                    const gid = game.gid || game.GID || game.id;
+	                    // 全场让球
+	                    const ratio = game.ratio || game.RATIO_R || game.ratio_r;
+	                    const iorRH = game.ior_RH || game.IOR_RH;
+	                    const iorRC = game.ior_RC || game.IOR_RC;
+	                    if (ratio && (iorRH || iorRC)) {
+	                      handicapLines.push({ line: ratio, home: iorRH, away: iorRC, gid });
+	                    }
+	                    // 全场大小
+	                    const ratioO = game.ratio_o || game.RATIO_OUO || game.ratio_ouo;
+	                    const iorOUH = game.ior_OUH || game.IOR_OUH;
+	                    const iorOUC = game.ior_OUC || game.IOR_OUC;
+	                    if (ratioO && (iorOUH || iorOUC)) {
+	                      overUnderLines.push({ line: ratioO, over: iorOUC, under: iorOUH, gid });
+	                    }
+	                    // 半场让球
+	                    const hratio = game.hratio || game.RATIO_HR || game.ratio_hr;
+	                    const iorHRH = game.ior_HRH || game.IOR_HRH;
+	                    const iorHRC = game.ior_HRC || game.IOR_HRC;
+	                    if (hratio && (iorHRH || iorHRC)) {
+	                      halfHandicapLines.push({ line: hratio, home: iorHRH, away: iorHRC, gid });
+	                    }
+	                    // 半场大小
+	                    const ratioHO = game.ratio_ho || game.RATIO_HOUO || game.ratio_houo;
+	                    const iorHOUH = game.ior_HOUH || game.IOR_HOUH;
+	                    const iorHOUC = game.ior_HOUC || game.IOR_HOUC;
+	                    if (ratioHO && (iorHOUH || iorHOUC)) {
+	                      halfOverUnderLines.push({ line: ratioHO, over: iorHOUC, under: iorHOUH, gid });
+	                    }
+	                  }
+	                  return { handicapLines, overUnderLines, halfHandicapLines, halfOverUnderLines };
+	                };
+
+	                // 从 moreMarkets 提取盘口（如果存在）
+	                const moreLines = extractLinesFromMoreMarkets(m.moreMarkets);
+
+	                // 合并盘口：优先使用 markets.full.handicapLines，然后补充 moreMarkets 里的
+	                const mergeLines = (existing: any[], incoming: any[]) => {
+	                  if (!incoming.length) return existing;
+	                  if (!existing.length) return incoming;
+	                  const map = new Map<string, any>();
+	                  for (const item of existing) {
+	                    const key = String(item.line || item.hdp || '');
+	                    map.set(key, item);
+	                  }
+	                  for (const item of incoming) {
+	                    const key = String(item.line || item.hdp || '');
+	                    // 如果已存在，合并（保留 gid）
+	                    if (map.has(key)) {
+	                      map.set(key, { ...map.get(key), ...item });
+	                    } else {
+	                      map.set(key, item);
+	                    }
+	                  }
+	                  return Array.from(map.values());
+	                };
+
+	                const fullHdp = mergeLines(
+	                  markets.full?.handicapLines || (markets.handicap ? [markets.handicap] : []),
+	                  moreLines.handicapLines
+	                );
+	                const fullOu = mergeLines(
+	                  markets.full?.overUnderLines || (markets.ou ? [markets.ou] : []),
+	                  moreLines.overUnderLines
+	                );
 
 	                // 角球盘口（全场）：优先使用后端标准 markets.corners，其次兼容 WS 的 markets.cornerFull
 	                const cornerFullSource = markets.corners || (markets as any).cornerFull || {};
@@ -448,8 +520,14 @@ const MatchesPage: React.FC = () => {
 	                const displayFullHdp = [...fullHdp, ...cornerFullHdp];
 	                const displayFullOu = [...fullOu, ...cornerFullOu];
 
-	                const halfHdpBase = markets.half?.handicapLines || (markets.half?.handicap ? [markets.half.handicap] : []);
-	                const halfOuBase = markets.half?.overUnderLines || (markets.half?.ou ? [markets.half.ou] : []);
+	                const halfHdpBase = mergeLines(
+	                  markets.half?.handicapLines || (markets.half?.handicap ? [markets.half.handicap] : []),
+	                  moreLines.halfHandicapLines
+	                );
+	                const halfOuBase = mergeLines(
+	                  markets.half?.overUnderLines || (markets.half?.ou ? [markets.half.ou] : []),
+	                  moreLines.halfOverUnderLines
+	                );
 
 	                // 角球盘口（半场）：兼容 WS 的 markets.cornerHalf（也只取一个主盘口）
 	                const cornerHalfSource = (markets as any).cornerHalf || {};
