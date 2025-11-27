@@ -1,18 +1,46 @@
 -- 智投系统数据库设计
--- 基于参考截图的完整功能需求
+-- 完整版本 - 包含所有表
+
+-- ========== 用户相关 ==========
 
 -- 用户表
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
+    email VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    -- 角色与层级（后端依赖）
     role VARCHAR(20) NOT NULL DEFAULT 'staff',
     parent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     agent_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    email_verified BOOLEAN DEFAULT false,
+    email_verification_token VARCHAR(255),
+    email_verification_expires_at TIMESTAMP,
+    trusted_ips TEXT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 验证码表
+CREATE TABLE verification_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email VARCHAR(100) NOT NULL,
+    code VARCHAR(6) NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 登录历史表
+CREATE TABLE login_history (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    success BOOLEAN DEFAULT TRUE,
+    verification_required BOOLEAN DEFAULT FALSE
 );
 
 -- 分组表
@@ -250,9 +278,84 @@ CREATE TABLE team_aliases (
 CREATE INDEX idx_league_aliases_canonical_key ON league_aliases(canonical_key);
 CREATE INDEX idx_team_aliases_canonical_key ON team_aliases(canonical_key);
 
+-- ========== 额外的表 ==========
+
+-- 皇冠注单表
+CREATE TABLE crown_wagers (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES crown_accounts(id),
+    ticket_id VARCHAR(50) UNIQUE,
+    league VARCHAR(200),
+    team_h VARCHAR(200),
+    team_c VARCHAR(200),
+    score VARCHAR(50),
+    bet_type VARCHAR(100),
+    bet_team VARCHAR(200),
+    spread VARCHAR(50),
+    odds VARCHAR(20),
+    gold DECIMAL(15,2),
+    win_gold DECIMAL(15,2),
+    status VARCHAR(50),
+    result VARCHAR(50),
+    wager_time TIMESTAMP,
+    raw_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 皇冠赛事表
+CREATE TABLE crown_matches (
+    id SERIAL PRIMARY KEY,
+    gid VARCHAR(50) UNIQUE NOT NULL,
+    league VARCHAR(200),
+    home_team VARCHAR(200),
+    away_team VARCHAR(200),
+    match_time TIMESTAMP,
+    status VARCHAR(50),
+    raw_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- OddsAPI 表
+CREATE TABLE oddsapi_events (
+    id SERIAL PRIMARY KEY,
+    event_id VARCHAR(100) UNIQUE NOT NULL,
+    sport_key VARCHAR(50),
+    league VARCHAR(200),
+    home_team VARCHAR(200),
+    away_team VARCHAR(200),
+    commence_time TIMESTAMP,
+    raw_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE oddsapi_odds (
+    id SERIAL PRIMARY KEY,
+    event_id VARCHAR(100) NOT NULL,
+    bookmaker VARCHAR(100),
+    market_key VARCHAR(50),
+    outcomes JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 更多索引
+CREATE INDEX idx_verification_codes_user_id ON verification_codes(user_id);
+CREATE INDEX idx_verification_codes_email ON verification_codes(email);
+CREATE INDEX idx_verification_codes_expires_at ON verification_codes(expires_at);
+CREATE INDEX idx_login_history_user_id ON login_history(user_id);
+CREATE INDEX idx_login_history_ip_address ON login_history(ip_address);
+CREATE INDEX idx_crown_wagers_account ON crown_wagers(account_id);
+CREATE INDEX idx_crown_wagers_ticket ON crown_wagers(ticket_id);
+CREATE INDEX idx_crown_wagers_time ON crown_wagers(wager_time);
+CREATE INDEX idx_crown_matches_gid ON crown_matches(gid);
+CREATE INDEX idx_oddsapi_events_event_id ON oddsapi_events(event_id);
+
 -- 插入默认数据
-INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@example.com', '$2b$10$placeholder_hash', 'admin');
+INSERT INTO users (username, email, password_hash, role, email_verified) VALUES
+('admin', 'admin@example.com', '$2b$10$placeholder_hash', 'admin', true);
 
 INSERT INTO groups (user_id, name, description) VALUES
 (1, '默认分组', '系统默认创建的分组');
