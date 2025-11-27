@@ -310,6 +310,55 @@ export class CrownAutomationService {
   }
 
   /**
+   * 生成随机账号（6-10位，字母+数字，至少2个字母1个数字）
+   */
+  private generateUsername(length = 8): string {
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    const digits = '0123456789';
+    const all = letters + digits;
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += all[Math.floor(Math.random() * all.length)];
+      }
+      const letterCount = Array.from(result).filter(c => letters.includes(c)).length;
+      const digitCount = Array.from(result).filter(c => digits.includes(c)).length;
+      if (letterCount >= 2 && digitCount >= 1) {
+        return result;
+      }
+    }
+    // 兜底
+    return `acc${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * 生成随机密码（6-12位，字母+数字，至少2个字母1个数字）
+   */
+  private generatePassword(length = 8): string {
+    const lettersLower = 'abcdefghijklmnopqrstuvwxyz';
+    const lettersUpper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '0123456789';
+    const all = lettersLower + lettersUpper + digits;
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += all[Math.floor(Math.random() * all.length)];
+      }
+      const letterCount = Array.from(result).filter(c =>
+        lettersLower.includes(c) || lettersUpper.includes(c)
+      ).length;
+      const digitCount = Array.from(result).filter(c => digits.includes(c)).length;
+      if (letterCount >= 2 && digitCount >= 1) {
+        return result;
+      }
+    }
+    // 兜底
+    return `Pwd${Math.random().toString(36).slice(2, 6)}123`;
+  }
+
+  /**
    * 🔄 从数据库恢复会话信息
    * 在后端启动时调用，恢复所有有效的登录会话
    */
@@ -5885,6 +5934,35 @@ export class CrownAutomationService {
     });
 
     try {
+      // 🔥 检查是否需要初始化
+      if (account.init_type && account.init_type !== 'none') {
+        console.log(`🔄 账号需要初始化 (init_type=${account.init_type})，自动执行初始化流程...`);
+
+        // 生成新的账号和密码
+        const newUsername = this.generateUsername();
+        const newPassword = this.generatePassword();
+        console.log(`🔑 生成新凭据: username=${newUsername}, password=${newPassword}`);
+
+        // 执行初始化
+        const initResult = await this.initializeAccountWithApi(account, {
+          username: newUsername,
+          password: newPassword,
+        });
+
+        if (!initResult.success) {
+          return {
+            success: false,
+            message: `初始化失败: ${initResult.message}`,
+          };
+        }
+
+        console.log(`✅ 初始化成功，新账号: ${initResult.updatedCredentials?.username}`);
+
+        // 更新账号信息用于后续登录
+        account.username = initResult.updatedCredentials?.username || newUsername;
+        account.password = initResult.updatedCredentials?.password || newPassword;
+      }
+
       const loginResp = await apiClient.login(account.username, account.password);
 
       if (loginResp.msg === '105') {
@@ -5896,11 +5974,35 @@ export class CrownAutomationService {
       }
 
       if (loginResp.msg === '106') {
-        // 需要初始化（强制改密）
-        return {
-          success: false,
-          message: '账号需要初始化，请先完成初始化操作',
-        };
+        // 需要初始化（强制改密）- 自动处理
+        console.log(`🔄 皇冠要求强制改密 (msg=106)，自动执行初始化...`);
+
+        const newUsername = this.generateUsername();
+        const newPassword = this.generatePassword();
+
+        const initResult = await this.initializeAccountWithApi(account, {
+          username: newUsername,
+          password: newPassword,
+        });
+
+        if (!initResult.success) {
+          return {
+            success: false,
+            message: `初始化失败: ${initResult.message}`,
+          };
+        }
+
+        // 用新凭据重新登录
+        account.username = initResult.updatedCredentials?.username || newUsername;
+        account.password = initResult.updatedCredentials?.password || newPassword;
+
+        const retryResp = await apiClient.login(account.username, account.password);
+        if (retryResp.msg !== '109' && retryResp.msg !== '100') {
+          return {
+            success: false,
+            message: `初始化后登录失败: ${retryResp.code_message || '未知错误'}`,
+          };
+        }
       }
 
       // 登录成功（msg=109 或 msg=100）
