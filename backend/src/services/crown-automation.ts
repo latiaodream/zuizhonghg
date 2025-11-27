@@ -6614,16 +6614,27 @@ export class CrownAutomationService {
       base_chose_team: baseChoseTeam,
     });
 
-    const sanitize = (value?: string | null) => {
-      const trimmed = (value ?? '').toString().trim();
-      return trimmed ? trimmed.toUpperCase() : undefined;
-    };
-
-    const effectiveParams = {
-      wtype: sanitize(overrideWtypeRaw) ?? baseWtype,
-      rtype: sanitize(overrideRtypeRaw) ?? baseRtype,
-      chose_team: (sanitize(overrideChoseTeamRaw) as 'H' | 'C' | 'N' | undefined) ?? baseChoseTeam,
-    };
+	    const sanitize = (value?: string | null) => {
+	      const trimmed = (value ?? '').toString().trim();
+	      return trimmed ? trimmed.toUpperCase() : undefined;
+	    };
+	
+	    const overrideWtype = sanitize(overrideWtypeRaw);
+	    const overrideRtype = sanitize(overrideRtypeRaw);
+	    const overrideChoseTeam = sanitize(overrideChoseTeamRaw) as 'H' | 'C' | 'N' | undefined;
+	
+	    // 角球盘口在前端会用自定义编码（CNR/CNOU/HCNR/HCNOU...）标记，
+	    // 这些编码只用于前端区分角球，不能直接传给皇冠接口。
+	    // 如果检测到此类编码，则忽略 wtype/rtype 覆盖，退回基础映射（RE/ROU/HRE/HROU 等），
+	    // 这样就会使用和普通盘一致的官方玩法编码，同时仍然使用角球行的 spread_gid。
+	    const isCornerOverride =
+	      overrideWtype && (overrideWtype.startsWith('CN') || overrideWtype.startsWith('HCN'));
+	
+	    const effectiveParams = {
+	      wtype: isCornerOverride ? baseWtype : (overrideWtype ?? baseWtype),
+	      rtype: isCornerOverride ? baseRtype : (overrideRtype ?? baseRtype),
+	      chose_team: overrideChoseTeam ?? baseChoseTeam,
+	    };
 
     console.log(`✅ 最终使用的参数:`, effectiveParams);
 
