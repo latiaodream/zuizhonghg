@@ -5963,6 +5963,17 @@ export class CrownAutomationService {
         // 更新账号信息用于后续登录
         account.username = initResult.updatedCredentials?.username || newUsername;
         account.password = initResult.updatedCredentials?.password || newPassword;
+
+        // 🔥 初始化成功后，更新 init_type 为 'none'，避免下次登录再次初始化
+        try {
+          await query(
+            `UPDATE crown_accounts SET init_type = 'none', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [account.id],
+          );
+          console.log(`✅ 已更新 init_type 为 'none'，下次登录将直接登录`);
+        } catch (updateErr) {
+          console.warn('⚠️ 更新 init_type 失败:', updateErr);
+        }
       }
 
       const loginResp = await apiClient.login(account.username, account.password);
@@ -5997,6 +6008,17 @@ export class CrownAutomationService {
         // 用新凭据重新登录
         account.username = initResult.updatedCredentials?.username || newUsername;
         account.password = initResult.updatedCredentials?.password || newPassword;
+
+        // 🔥 强制改密成功后，更新 init_type 为 'none'
+        try {
+          await query(
+            `UPDATE crown_accounts SET init_type = 'none', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [account.id],
+          );
+          console.log(`✅ 已更新 init_type 为 'none'（强制改密后）`);
+        } catch (updateErr) {
+          console.warn('⚠️ 更新 init_type 失败:', updateErr);
+        }
 
         const retryResp = await apiClient.login(account.username, account.password);
         if (retryResp.msg !== '109' && retryResp.msg !== '100') {
