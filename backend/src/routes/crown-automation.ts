@@ -1810,6 +1810,8 @@ router.post('/odds/preview', async (req: any, res) => {
             marketChoseTeam: body.market_chose_team || body.marketChoseTeam,
             spread_gid: body.spread_gid || body.spreadGid,  // 盘口专属 gid
             spreadGid: body.spread_gid || body.spreadGid,
+            lid: body.lid || body.league_id,  // 联赛 ID
+            league_id: body.lid || body.league_id,
         };
 
 	    // 调试日志：打印前端传来的市场参数
@@ -1826,6 +1828,7 @@ router.post('/odds/preview', async (req: any, res) => {
 	        market_rtype: payload.market_rtype,
 	        market_chose_team: payload.market_chose_team,
 	        spread_gid: payload.spread_gid,  // 盘口专属 gid
+	        lid: payload.lid,  // 联赛 ID
 	    });
 
         const preview = await getCrownAutomation().fetchLatestOdds(accountId, payload as any);
