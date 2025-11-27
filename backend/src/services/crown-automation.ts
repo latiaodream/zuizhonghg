@@ -5900,7 +5900,6 @@ export class CrownAutomationService {
         return {
           success: false,
           message: '账号需要初始化，请先完成初始化操作',
-          needsInitialization: true,  // 🔥 新增：告知前端需要初始化
         };
       }
 

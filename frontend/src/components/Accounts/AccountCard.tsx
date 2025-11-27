@@ -11,7 +11,6 @@ import {
   PlayCircleOutlined,
   StopOutlined,
   CrownOutlined,
-  SettingOutlined,
 } from '@ant-design/icons';
 import type { CrownAccount } from '../../types';
 
@@ -26,7 +25,6 @@ interface AccountCardProps {
   onLogin?: (account: CrownAccount) => void;
   onLogout?: (account: CrownAccount) => void;
   onCheckHistory?: (account: CrownAccount) => void;
-  onInitialize?: (account: CrownAccount) => void;
 }
 
 const AccountCard: React.FC<AccountCardProps> = ({
@@ -38,7 +36,6 @@ const AccountCard: React.FC<AccountCardProps> = ({
   onLogin,
   onLogout,
   onCheckHistory,
-  onInitialize,
 }) => {
   const formatDiscount = (value?: number) => {
     if (!value || value <= 0) {
@@ -229,17 +226,6 @@ const AccountCard: React.FC<AccountCardProps> = ({
             >
               查账
             </Button>
-            {/* 仅当 init_type 不是 'none' 时显示初始化按钮 */}
-            {account.init_type !== 'none' && (
-              <Button
-                type="text"
-                size="small"
-                icon={<SettingOutlined />}
-                onClick={() => onInitialize?.(account)}
-              >
-                初始化
-              </Button>
-            )}
             <Button type="text" size="small" onClick={() => onEdit(account)}>
               编辑
             </Button>
