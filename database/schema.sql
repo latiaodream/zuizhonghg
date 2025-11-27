@@ -194,6 +194,7 @@ CREATE TABLE bets (
     virtual_profit_loss DECIMAL(15,2), -- 虚拟盈亏
     result_score VARCHAR(50), -- 结算比分，例如 1-3
     result_text VARCHAR(255), -- 结算文本
+	error_message TEXT, -- 下注失败时的错误原因
 
     -- 官网信息
     official_bet_id VARCHAR(100), -- 官网下注单号

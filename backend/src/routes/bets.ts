@@ -767,8 +767,11 @@ router.post('/', async (req: any, res) => {
 
                 // 创建数据库记录
                 const initialStatus = betResult.success ? 'confirmed' : 'cancelled';
-                // 下注失败时保存失败原因
+                // 下注失败时记录失败原因，写入 bets.error_message 方便后续排查
                 const errorMessage = betResult.success ? null : (betResult.message || '下注失败');
+                if (!betResult.success && errorMessage) {
+                    console.warn(`账号 ${accountId} 下注返回失败: ${errorMessage}`);
+                }
 
                 const finalOddsValue = betResult.actualOdds || betData.odds;
 

@@ -220,6 +220,7 @@ export interface Bet {
     result?: 'win' | 'lose' | 'draw' | 'cancelled';
     payout: number;
     profit_loss: number;
+    error_message?: string;
     official_bet_id?: string;
     confirmed_at?: string;
     settled_at?: string;

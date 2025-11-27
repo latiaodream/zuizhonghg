@@ -462,10 +462,10 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     // 首次加载时立即获取赔率
     previewOddsRef.current(true);
 
-    // 设置定时器
+    // 设置定时器（每 3 秒刷新一次，减轻皇冠接口压力，角球等盘口可以更多依赖 WSS 本地赔率兜底）
     const timer = setInterval(() => {
       previewOddsRef.current(true);
-    }, 2000); // 每 2 秒刷新一次
+    }, 3000);
 
     return () => clearInterval(timer);
   }, [visible, match, autoRefreshOdds]);
