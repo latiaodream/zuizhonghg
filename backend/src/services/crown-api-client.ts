@@ -959,6 +959,16 @@ export class CrownApiClient {
           };
         }
 
+        // 处理 VariableStandard 错误（通常表示会话失效或参数错误）
+        if (errorText === 'VariableStandard' || errorText === 'Variable Standard') {
+          console.log('❌ 收到 VariableStandard 响应，可能是会话失效或参数错误');
+          return {
+            success: false,
+            code: 'SESSION_EXPIRED',
+            message: '会话已失效或请求参数错误，请重新登录账号。',
+          };
+        }
+
         console.log('❌ 无效的响应格式:', errorText);
         return {
           success: false,
