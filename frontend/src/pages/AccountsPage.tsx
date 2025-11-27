@@ -20,7 +20,6 @@ import {
 } from '@ant-design/icons';
 import type { CrownAccount, Group } from '../types';
 import { accountApi, groupApi, crownApi } from '../services/api';
-import { generateAccountUsername, generateAccountPassword } from '../utils/credentials';
 import AccountFormModal from '../components/Accounts/AccountFormModal';
 import AccountDetailModal from '../components/Accounts/AccountDetailModal';
 import AccountCard from '../components/Accounts/AccountCard';
@@ -207,35 +206,6 @@ const AccountsPage: React.FC = () => {
   };
 
   // 一键初始化账号（自动生成账号密码并提交）
-  const handleInitializeAccount = async (account: CrownAccount) => {
-    const key = `init-${account.id}`;
-    try {
-      // 自动生成新账号和密码
-      const newUsername = generateAccountUsername();
-      const newPassword = generateAccountPassword();
-
-      message.loading({ content: `正在初始化账号 ${account.username}...`, key, duration: 0 });
-
-      const response = await crownApi.initializeAccountWithApi(account.id, {
-        username: newUsername,
-        password: newPassword,
-      });
-
-      if (response.success) {
-        message.success({
-          content: `初始化成功！新账号: ${response.data?.username}，新密码: ${response.data?.password}`,
-          key,
-          duration: 5
-        });
-        await loadAccounts();
-      } else {
-        message.error({ content: response.error || '初始化失败', key, duration: 3 });
-      }
-    } catch (error: any) {
-      message.error({ content: error.response?.data?.error || '初始化失败', key, duration: 3 });
-    }
-  };
-
   // 单个账号登录（纯 API 方式）
   const handleLoginAccount = async (account: CrownAccount) => {
     const key = `login-${account.id}`;
@@ -701,7 +671,6 @@ const AccountsPage: React.FC = () => {
                 onLogout={handleLogoutAccount}
                 onRefresh={handleRefreshBalance}
                 onCheckHistory={handleCheckHistory}
-                onInitialize={handleInitializeAccount}
               />
             ))}
           </div>
