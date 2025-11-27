@@ -24,7 +24,6 @@ import { generateAccountUsername, generateAccountPassword } from '../utils/crede
 import AccountFormModal from '../components/Accounts/AccountFormModal';
 import AccountDetailModal from '../components/Accounts/AccountDetailModal';
 import AccountCard from '../components/Accounts/AccountCard';
-import AccountInitializeModal from '../components/Accounts/AccountInitializeModal';
 import type { AxiosError } from 'axios';
 
 const { Title, Text } = Typography;
@@ -53,11 +52,6 @@ const AccountsPage: React.FC = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingAccount, setEditingAccount] = useState<CrownAccount | null>(null);
   const [viewingAccount, setViewingAccount] = useState<CrownAccount | null>(null);
-
-  // 初始化相关状态
-  const [initializeModalVisible, setInitializeModalVisible] = useState(false);
-  const [initializingAccount, setInitializingAccount] = useState<CrownAccount | null>(null);
-  const [initCredentials, setInitCredentials] = useState({ username: '', password: '' });
 
   useEffect(() => {
     loadGroups();
@@ -212,49 +206,33 @@ const AccountsPage: React.FC = () => {
     }
   };
 
-  // 打开初始化模态框
-  const handleOpenInitialize = (account: CrownAccount) => {
-    setInitializingAccount(account);
-    // 生成默认的新账号和密码
-    setInitCredentials({
-      username: generateAccountUsername(),
-      password: generateAccountPassword(),
-    });
-    setInitializeModalVisible(true);
-  };
-
-  // 执行初始化
-  const handleInitializeAccount = async () => {
-    if (!initializingAccount) return;
-
-    const key = `init-${initializingAccount.id}`;
+  // 一键初始化账号（自动生成账号密码并提交）
+  const handleInitializeAccount = async (account: CrownAccount) => {
+    const key = `init-${account.id}`;
     try {
-      message.loading({ content: `正在初始化账号 ${initializingAccount.username}...`, key, duration: 0 });
+      // 自动生成新账号和密码
+      const newUsername = generateAccountUsername();
+      const newPassword = generateAccountPassword();
 
-      const response = await crownApi.initializeAccountWithApi(initializingAccount.id, {
-        username: initCredentials.username,
-        password: initCredentials.password,
+      message.loading({ content: `正在初始化账号 ${account.username}...`, key, duration: 0 });
+
+      const response = await crownApi.initializeAccountWithApi(account.id, {
+        username: newUsername,
+        password: newPassword,
       });
 
       if (response.success) {
-        message.success({ content: `账号初始化成功！新账号: ${response.data?.username}`, key, duration: 3 });
-        setInitializeModalVisible(false);
-        setInitializingAccount(null);
+        message.success({
+          content: `初始化成功！新账号: ${response.data?.username}，新密码: ${response.data?.password}`,
+          key,
+          duration: 5
+        });
         await loadAccounts();
       } else {
         message.error({ content: response.error || '初始化失败', key, duration: 3 });
       }
     } catch (error: any) {
       message.error({ content: error.response?.data?.error || '初始化失败', key, duration: 3 });
-    }
-  };
-
-  // 重新生成账号/密码
-  const handleRegenerateCredential = (type: 'username' | 'password') => {
-    if (type === 'username') {
-      setInitCredentials(prev => ({ ...prev, username: generateAccountUsername() }));
-    } else {
-      setInitCredentials(prev => ({ ...prev, password: generateAccountPassword() }));
     }
   };
 
@@ -723,7 +701,7 @@ const AccountsPage: React.FC = () => {
                 onLogout={handleLogoutAccount}
                 onRefresh={handleRefreshBalance}
                 onCheckHistory={handleCheckHistory}
-                onInitialize={handleOpenInitialize}
+                onInitialize={handleInitializeAccount}
               />
             ))}
           </div>
@@ -758,20 +736,6 @@ const AccountsPage: React.FC = () => {
         onEdit={(account) => {
           setDetailModalVisible(false);
           handleEditAccount(account);
-        }}
-      />
-
-      {/* 账号初始化模态框 */}
-      <AccountInitializeModal
-        open={initializeModalVisible}
-        account={initializingAccount}
-        credentials={initCredentials}
-        onCredentialsChange={(values) => setInitCredentials(prev => ({ ...prev, ...values }))}
-        onRegenerate={handleRegenerateCredential}
-        onSubmit={async () => { await handleInitializeAccount(); }}
-        onCancel={() => {
-          setInitializeModalVisible(false);
-          setInitializingAccount(null);
         }}
       />
     </div>
