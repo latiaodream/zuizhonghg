@@ -55,6 +55,8 @@ interface BetRequest {
   marketRtype?: string;
   market_chose_team?: string;
   marketChoseTeam?: string;
+  spread_gid?: string;  // 盘口专属 gid（用于副盘口）
+  spreadGid?: string;
 }
 
 interface CrownLoginResult {
@@ -6611,16 +6613,21 @@ export class CrownAutomationService {
     const maxRetries = 3;
     const retryDelay = 2000;
 
-    // 提取盘口线参数
+    // 提取盘口线参数和盘口专属 gid
     const spreadValue = betRequest.market_line ?? betRequest.marketLine ?? '';
+    const spreadGid = betRequest.spread_gid ?? betRequest.spreadGid ?? '';
+    // 优先使用盘口专属 gid（用于副盘口），否则使用主比赛 gid
+    const effectiveGid = spreadGid || crownMatchId;
     console.log('📊 盘口线:', spreadValue || '未指定');
+    console.log('📊 盘口专属 GID:', spreadGid || '未指定（使用主 GID）');
+    console.log('📊 实际使用 GID:', effectiveGid);
 
     for (const variant of variants) {
-      console.log('🎯 尝试获取赔率组合:', variant, '盘口线:', spreadValue || '(主盘口)');
+      console.log('🎯 尝试获取赔率组合:', variant, '盘口线:', spreadValue || '(主盘口)', 'gid:', effectiveGid);
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        console.log(`🔄 获取赔率 [${variant.wtype}/${variant.rtype}] spread=${spreadValue || '主盘口'} 尝试 ${attempt}/${maxRetries}`);
+        console.log(`🔄 获取赔率 [${variant.wtype}/${variant.rtype}] gid=${effectiveGid} spread=${spreadValue || '主盘口'} 尝试 ${attempt}/${maxRetries}`);
         oddsResult = await apiClient.getLatestOdds({
-          gid: crownMatchId,
+          gid: effectiveGid,
           gtype: 'FT',
           wtype: variant.wtype,
           chose_team: variant.chose_team,
@@ -6680,7 +6687,7 @@ export class CrownAutomationService {
       return {
         success: false,
         message,
-        crownMatchId,
+        crownMatchId: effectiveGid, // 返回实际使用的 gid
         reasonCode: lastErrorCode,
       };
     }
@@ -6690,7 +6697,7 @@ export class CrownAutomationService {
       message: '获取赔率成功',
       oddsResult,
       variant: selectedVariant,
-      crownMatchId,
+      crownMatchId: effectiveGid, // 返回实际使用的 gid（可能是盘口专属 gid）
     };
   }
 
@@ -7753,6 +7760,7 @@ export class CrownAutomationService {
 
         if ((hasRE || hasR) && handicapLine && (handicapHome || handicapAway)) {
           const master = this.pickString(game, ['@_master', 'master']);
+          const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
           const hwtype = (hasRE ? 'RE' : hasR ? 'R' : 'RE');
           const homeRtype = hwtype === 'RE' ? 'REH' : 'RH';
           const awayRtype = hwtype === 'RE' ? 'REC' : 'RC';
@@ -7765,8 +7773,9 @@ export class CrownAutomationService {
             away_rtype: awayRtype,
             home_chose_team: 'H',
             away_chose_team: 'C',
+            gid: gameGid, // 盘口专用 gid
           });
-          console.log(`    ✅ 让球 [${hwtype}] [Game ${i + 1}, master=${master}]: ${handicapLine} (${handicapHome} / ${handicapAway})`);
+          console.log(`    ✅ 让球 [${hwtype}] [Game ${i + 1}, master=${master}, gid=${gameGid}]: ${handicapLine} (${handicapHome} / ${handicapAway})`);
         }
 
         // 提取大小球盘口（仅主大小球，排除角球/球队进球等）
@@ -7781,6 +7790,7 @@ export class CrownAutomationService {
           const avg = nums.length ? nums.map(parseFloat).reduce((a,b)=>a+b,0)/nums.length : NaN;
           if (!(Number.isFinite(avg) && avg > 6)) {
             const master = this.pickString(game, ['@_master', 'master']);
+            const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
             const owtype = (hasROU ? 'ROU' : 'OU');
             const overRtype = owtype === 'ROU' ? 'ROUC' : 'OUC';
             const underRtype = owtype === 'ROU' ? 'ROUH' : 'OUH';
@@ -7793,8 +7803,9 @@ export class CrownAutomationService {
               under_rtype: underRtype,
               over_chose_team: 'C',
               under_chose_team: 'H',
+              gid: gameGid, // 盘口专用 gid
             });
-            console.log(`    ✅ 大小 [${owtype}] [Game ${i + 1}, master=${master}]: ${ouLineMain} (大:${ouOverMain} / 小:${ouUnderMain})`);
+            console.log(`    ✅ 大小 [${owtype}] [Game ${i + 1}, master=${master}, gid=${gameGid}]: ${ouLineMain} (大:${ouOverMain} / 小:${ouUnderMain})`);
           }
         }
 
@@ -7807,6 +7818,7 @@ export class CrownAutomationService {
 
         if (halfHandicapLine && (halfHandicapHome || halfHandicapAway)) {
           const master = this.pickString(game, ['@_master', 'master']);
+          const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
           const hwtype = (hasHRE ? 'HRE' : hasHR ? 'HR' : 'HRE');
           const homeRtype = hwtype === 'HRE' ? 'HREH' : 'HRH';
           const awayRtype = hwtype === 'HRE' ? 'HREC' : 'HRC';
@@ -7819,8 +7831,9 @@ export class CrownAutomationService {
             away_rtype: awayRtype,
             home_chose_team: 'H',
             away_chose_team: 'C',
+            gid: gameGid, // 盘口专用 gid
           });
-          console.log(`    ✅ 半场让球 [${hwtype}] [Game ${i + 1}, master=${master}]: ${halfHandicapLine} (${halfHandicapHome} / ${halfHandicapAway})`);
+          console.log(`    ✅ 半场让球 [${hwtype}] [Game ${i + 1}, master=${master}, gid=${gameGid}]: ${halfHandicapLine} (${halfHandicapHome} / ${halfHandicapAway})`);
         }
 
         // 提取半场大小球盘口（仅主大小球，排除角球/球队进球等）
@@ -7835,6 +7848,7 @@ export class CrownAutomationService {
           const avgH = numsH.length ? numsH.map(parseFloat).reduce((a,b)=>a+b,0)/numsH.length : NaN;
           if (!(Number.isFinite(avgH) && avgH > 3.5)) {
             const master = this.pickString(game, ['@_master', 'master']);
+            const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
             const howtype = (hasHROU ? 'HROU' : 'HOU');
             const overRtype = howtype === 'HROU' ? 'HROUC' : 'HOUC';
             const underRtype = howtype === 'HROU' ? 'HROUH' : 'HOUH';
@@ -7847,8 +7861,9 @@ export class CrownAutomationService {
               under_rtype: underRtype,
               over_chose_team: 'C',
               under_chose_team: 'H',
+              gid: gameGid, // 盘口专用 gid
             });
-            console.log(`    ✅ 半场大小 [${howtype}] [Game ${i + 1}, master=${master}]: ${halfOuLine} (大:${halfOuOver} / 小:${halfOuUnder})`);
+            console.log(`    ✅ 半场大小 [${howtype}] [Game ${i + 1}, master=${master}, gid=${gameGid}]: ${halfOuLine} (大:${halfOuOver} / 小:${halfOuUnder})`);
           }
         }
 
@@ -7934,8 +7949,9 @@ export class CrownAutomationService {
         const cornerHandicapLine = pickString(game, ['RATIO_CNRH', 'RATIO_CNRC', 'ratio_cnrh', 'ratio_cnrc', 'ratio']);
         const cornerHandicapHome = pickString(game, ['IOR_CNRH', 'ior_CNRH', 'ior_cnrh']);
         const cornerHandicapAway = pickString(game, ['IOR_CNRC', 'ior_CNRC', 'ior_cnrc']);
+        const cornerGid = pickString(game, ['GID', 'gid', '@_id']);
         if (cornerHandicapLine && cornerHandicapHome && cornerHandicapAway) {
-          cornerHandicapLines.push({ line: cornerHandicapLine, home: cornerHandicapHome, away: cornerHandicapAway });
+          cornerHandicapLines.push({ line: cornerHandicapLine, home: cornerHandicapHome, away: cornerHandicapAway, gid: cornerGid });
         }
 
         // 角球大小盘口
@@ -7943,7 +7959,7 @@ export class CrownAutomationService {
         const cornerOuOver = pickString(game, ['IOR_CNOUH', 'ior_CNOUH', 'ior_cnouh']);
         const cornerOuUnder = pickString(game, ['IOR_CNOUC', 'ior_CNOUC', 'ior_cnouc']);
         if (cornerOuLine && cornerOuOver && cornerOuUnder) {
-          cornerOverUnderLines.push({ line: cornerOuLine, over: cornerOuOver, under: cornerOuUnder });
+          cornerOverUnderLines.push({ line: cornerOuLine, over: cornerOuOver, under: cornerOuUnder, gid: cornerGid });
         }
       }
 

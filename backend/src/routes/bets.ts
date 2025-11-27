@@ -761,6 +761,8 @@ router.post('/', async (req: any, res) => {
                     marketRtype: betData.market_rtype,
                     market_chose_team: betData.market_chose_team,
                     marketChoseTeam: betData.market_chose_team,
+                    spread_gid: betData.spread_gid,  // 盘口专属 gid
+                    spreadGid: betData.spread_gid,
                 });
 
                 // 创建数据库记录

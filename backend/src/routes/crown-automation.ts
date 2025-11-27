@@ -1808,6 +1808,8 @@ router.post('/odds/preview', async (req: any, res) => {
             marketRtype: body.market_rtype || body.marketRtype,
             market_chose_team: body.market_chose_team || body.marketChoseTeam,
             marketChoseTeam: body.market_chose_team || body.marketChoseTeam,
+            spread_gid: body.spread_gid || body.spreadGid,  // 盘口专属 gid
+            spreadGid: body.spread_gid || body.spreadGid,
         };
 
 	    // 调试日志：打印前端传来的市场参数
@@ -1823,6 +1825,7 @@ router.post('/odds/preview', async (req: any, res) => {
 	        market_wtype: payload.market_wtype,
 	        market_rtype: payload.market_rtype,
 	        market_chose_team: payload.market_chose_team,
+	        spread_gid: payload.spread_gid,  // 盘口专属 gid
 	    });
 
         const preview = await getCrownAutomation().fetchLatestOdds(accountId, payload as any);
@@ -1909,7 +1912,7 @@ router.post('/odds/preview', async (req: any, res) => {
             }
         }
 
-        // 盘口匹配，返回正常赔率
+        // 返回赔率（带盘口匹配状态）
         res.json({
             success: true,
             data: {
@@ -1918,8 +1921,8 @@ router.post('/odds/preview', async (req: any, res) => {
                 market: preview.variant,
                 raw: preview.oddsResult,
                 crown_match_id: preview.crownMatchId,
-                message: preview.message,
-                spread_mismatch: false,
+                message: spreadMismatch ? `盘口线不匹配: 请求=${requestedLine}, 实际=${returnedSpread}` : preview.message,
+                spread_mismatch: spreadMismatch,
                 requested_line: requestedLine,
                 returned_spread: returnedSpread,
             },

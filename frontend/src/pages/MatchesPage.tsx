@@ -553,13 +553,14 @@ const MatchesPage: React.FC = () => {
                               const baseLabel = decimal !== null ? formatHandicapValue(decimal) : rawHdp;
                               const isCorner = (line as any).__isCorner || (line as any).__meta?.mode === 'CN';
                               const displayHdp = isCorner ? `角球 ${baseLabel}` : baseLabel;
+                              const lineGid = line.gid;  // 盘口专属 gid
                               return (
                                 <React.Fragment key={i}>
                                   <div className="hdp-label-cell">{displayHdp}</div>
-                                  <div className="odds-cell" onClick={() => line.home && openBetModal(m, { bet_type: isCorner ? '角球让球' : '让球', bet_option: `${homeLabel} (${displayHdp})`, odds: line.home, label: `[${isCorner ? '角球让球' : '让球'}] ${homeLabel} (${displayHdp}) @${line.home}`, market_category: 'handicap', market_scope: 'full', market_side: 'home', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNR' : undefined, market_rtype: isCorner ? 'CNRH' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.home && openBetModal(m, { bet_type: isCorner ? '角球让球' : '让球', bet_option: `${homeLabel} (${displayHdp})`, odds: line.home, label: `[${isCorner ? '角球让球' : '让球'}] ${homeLabel} (${displayHdp}) @${line.home}`, market_category: 'handicap', market_scope: 'full', market_side: 'home', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNR' : undefined, market_rtype: isCorner ? 'CNRH' : undefined, spread_gid: lineGid })}>
                                     {line.home || '-'}
                                   </div>
-                                  <div className="odds-cell" onClick={() => line.away && openBetModal(m, { bet_type: isCorner ? '角球让球' : '让球', bet_option: `${awayLabel} (${displayHdp})`, odds: line.away, label: `[${isCorner ? '角球让球' : '让球'}] ${awayLabel} (${displayHdp}) @${line.away}`, market_category: 'handicap', market_scope: 'full', market_side: 'away', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNR' : undefined, market_rtype: isCorner ? 'CNRC' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.away && openBetModal(m, { bet_type: isCorner ? '角球让球' : '让球', bet_option: `${awayLabel} (${displayHdp})`, odds: line.away, label: `[${isCorner ? '角球让球' : '让球'}] ${awayLabel} (${displayHdp}) @${line.away}`, market_category: 'handicap', market_scope: 'full', market_side: 'away', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNR' : undefined, market_rtype: isCorner ? 'CNRC' : undefined, spread_gid: lineGid })}>
                                     {line.away || '-'}
                                   </div>
                                 </React.Fragment>
@@ -580,13 +581,14 @@ const MatchesPage: React.FC = () => {
                                 : rawHdp;
                               const isCorner = (line as any).__isCorner || (line as any).__meta?.mode === 'CN';
                               const displayHdp = isCorner ? `角球 ${baseLabel}` : baseLabel;
+                              const lineGid = line.gid;  // 盘口专属 gid
                               return (
                                 <React.Fragment key={i}>
                                   <div className="hdp-label-cell">{displayHdp}</div>
-                                  <div className="odds-cell" onClick={() => line.over && openBetModal(m, { bet_type: isCorner ? '角球大小' : '大小', bet_option: `大 ${displayHdp}`, odds: line.over, label: `[${isCorner ? '角球大小' : '大小'}] 大 ${displayHdp} @${line.over}`, market_category: 'overunder', market_scope: 'full', market_side: 'over', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNOU' : undefined, market_rtype: isCorner ? 'CNOUC' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.over && openBetModal(m, { bet_type: isCorner ? '角球大小' : '大小', bet_option: `大 ${displayHdp}`, odds: line.over, label: `[${isCorner ? '角球大小' : '大小'}] 大 ${displayHdp} @${line.over}`, market_category: 'overunder', market_scope: 'full', market_side: 'over', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNOU' : undefined, market_rtype: isCorner ? 'CNOUC' : undefined, spread_gid: lineGid })}>
                                     {line.over || '-'}
                                   </div>
-                                  <div className="odds-cell" onClick={() => line.under && openBetModal(m, { bet_type: isCorner ? '角球大小' : '大小', bet_option: `小 ${displayHdp}`, odds: line.under, label: `[${isCorner ? '角球大小' : '大小'}] 小 ${displayHdp} @${line.under}`, market_category: 'overunder', market_scope: 'full', market_side: 'under', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNOU' : undefined, market_rtype: isCorner ? 'CNOUH' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.under && openBetModal(m, { bet_type: isCorner ? '角球大小' : '大小', bet_option: `小 ${displayHdp}`, odds: line.under, label: `[${isCorner ? '角球大小' : '大小'}] 小 ${displayHdp} @${line.under}`, market_category: 'overunder', market_scope: 'full', market_side: 'under', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'CNOU' : undefined, market_rtype: isCorner ? 'CNOUH' : undefined, spread_gid: lineGid })}>
                                     {line.under || '-'}
                                   </div>
                                 </React.Fragment>
@@ -621,13 +623,14 @@ const MatchesPage: React.FC = () => {
                               const baseLabel = decimal !== null ? formatHandicapValue(decimal) : rawHdp;
                               const isCorner = (line as any).__isCorner || (line as any).__meta?.mode === 'CN';
                               const displayHdp = isCorner ? `角球 ${baseLabel}` : baseLabel;
+                              const lineGid = line.gid;  // 盘口专属 gid
                               return (
                                 <React.Fragment key={i}>
                                   <div className="hdp-label-cell">{displayHdp}</div>
-                                  <div className="odds-cell" onClick={() => line.home && openBetModal(m, { bet_type: isCorner ? '半场角球让球' : '半场让球', bet_option: `${homeLabel} (${displayHdp})`, odds: line.home, label: `[${isCorner ? '半场角球让球' : '半场让球'}] ${homeLabel} (${displayHdp}) @${line.home}`, market_category: 'handicap', market_scope: 'half', market_side: 'home', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNR' : undefined, market_rtype: isCorner ? 'HCNRH' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.home && openBetModal(m, { bet_type: isCorner ? '半场角球让球' : '半场让球', bet_option: `${homeLabel} (${displayHdp})`, odds: line.home, label: `[${isCorner ? '半场角球让球' : '半场让球'}] ${homeLabel} (${displayHdp}) @${line.home}`, market_category: 'handicap', market_scope: 'half', market_side: 'home', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNR' : undefined, market_rtype: isCorner ? 'HCNRH' : undefined, spread_gid: lineGid })}>
                                     {line.home || '-'}
                                   </div>
-                                  <div className="odds-cell" onClick={() => line.away && openBetModal(m, { bet_type: isCorner ? '半场角球让球' : '半场让球', bet_option: `${awayLabel} (${displayHdp})`, odds: line.away, label: `[${isCorner ? '半场角球让球' : '半场让球'}] ${awayLabel} (${displayHdp}) @${line.away}`, market_category: 'handicap', market_scope: 'half', market_side: 'away', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNR' : undefined, market_rtype: isCorner ? 'HCNRC' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.away && openBetModal(m, { bet_type: isCorner ? '半场角球让球' : '半场让球', bet_option: `${awayLabel} (${displayHdp})`, odds: line.away, label: `[${isCorner ? '半场角球让球' : '半场让球'}] ${awayLabel} (${displayHdp}) @${line.away}`, market_category: 'handicap', market_scope: 'half', market_side: 'away', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNR' : undefined, market_rtype: isCorner ? 'HCNRC' : undefined, spread_gid: lineGid })}>
                                     {line.away || '-'}
                                   </div>
                                 </React.Fragment>
@@ -648,13 +651,14 @@ const MatchesPage: React.FC = () => {
                                 : rawHdp;
                               const isCorner = (line as any).__isCorner || (line as any).__meta?.mode === 'CN';
                               const displayHdp = isCorner ? `角球 ${baseLabel}` : baseLabel;
+                              const lineGid = line.gid;  // 盘口专属 gid
                               return (
                                 <React.Fragment key={i}>
                                   <div className="hdp-label-cell">{displayHdp}</div>
-                                  <div className="odds-cell" onClick={() => line.over && openBetModal(m, { bet_type: isCorner ? '半场角球大小' : '半场大小', bet_option: `大 ${displayHdp}`, odds: line.over, label: `[${isCorner ? '半场角球大小' : '半场大小'}] 大 ${displayHdp} @${line.over}`, market_category: 'overunder', market_scope: 'half', market_side: 'over', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNOU' : undefined, market_rtype: isCorner ? 'HCNOUC' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.over && openBetModal(m, { bet_type: isCorner ? '半场角球大小' : '半场大小', bet_option: `大 ${displayHdp}`, odds: line.over, label: `[${isCorner ? '半场角球大小' : '半场大小'}] 大 ${displayHdp} @${line.over}`, market_category: 'overunder', market_scope: 'half', market_side: 'over', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNOU' : undefined, market_rtype: isCorner ? 'HCNOUC' : undefined, spread_gid: lineGid })}>
                                     {line.over || '-'}
                                   </div>
-                                  <div className="odds-cell" onClick={() => line.under && openBetModal(m, { bet_type: isCorner ? '半场角球大小' : '半场大小', bet_option: `小 ${displayHdp}`, odds: line.under, label: `[${isCorner ? '半场角球大小' : '半场大小'}] 小 ${displayHdp} @${line.under}`, market_category: 'overunder', market_scope: 'half', market_side: 'under', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNOU' : undefined, market_rtype: isCorner ? 'HCNOUH' : undefined })}>
+                                  <div className="odds-cell" onClick={() => line.under && openBetModal(m, { bet_type: isCorner ? '半场角球大小' : '半场大小', bet_option: `小 ${displayHdp}`, odds: line.under, label: `[${isCorner ? '半场角球大小' : '半场大小'}] 小 ${displayHdp} @${line.under}`, market_category: 'overunder', market_scope: 'half', market_side: 'under', market_line: rawHdp, market_index: i, market_wtype: isCorner ? 'HCNOU' : undefined, market_rtype: isCorner ? 'HCNOUH' : undefined, spread_gid: lineGid })}>
                                     {line.under || '-'}
                                   </div>
                                 </React.Fragment>

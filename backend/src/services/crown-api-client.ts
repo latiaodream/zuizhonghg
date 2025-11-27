@@ -892,7 +892,8 @@ export class CrownApiClient {
     gtype: string;        // 比赛类型 (FT=足球, BK=篮球等)
     wtype: string;        // 玩法类型 (RM=独赢, R=让球, OU=大小球等)
     chose_team: string;   // 选择的队伍 (H=主队, C=客队, N=和局)
-    spread?: string;      // ⚠️ 当前仅用于日志/本地校验，不再传给 API，避免 VariableStandard 错误
+    spread?: string;      // 盘口线（让球数/大小球线）
+    con?: string;         // 盘口线（同 spread，兼容下注接口参数名）
   }): Promise<any> {
     console.log('🔄 获取最新赔率...');
 
@@ -900,11 +901,13 @@ export class CrownApiClient {
       throw new Error('未登录，无法获取赔率');
     }
 
+    // 获取盘口线参数（优先用 con，兼容 spread）
+    const conValue = params.con || params.spread || '';
+
     const requestParams = new URLSearchParams({
       p: `${params.gtype}_order_view`,
       uid: this.uid,
       ver: this.version,
-      // 与官方示例保持一致，使用简体中文
       langx: 'zh-cn',
       odd_f_type: 'H',
       gid: params.gid,
@@ -913,12 +916,17 @@ export class CrownApiClient {
       chose_team: params.chose_team,
     });
 
+    // 如果有盘口线，添加 con 参数
+    if (conValue) {
+      requestParams.set('con', conValue);
+    }
+
     try {
       console.log('📤 发送获取赔率请求...');
       console.log('   比赛ID:', params.gid);
       console.log('   玩法:', params.wtype);
       console.log('   选择:', params.chose_team);
-      // 盘口线目前仅用于本地校验，不再直接传给 API，避免 VariableStandard 等错误
+      console.log('   盘口线:', conValue || '(主盘口)');
 
       const response = await this.httpClient.post(`/transform.php?ver=${this.version}`, requestParams.toString());
 

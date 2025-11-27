@@ -41,6 +41,7 @@ export interface SelectionMeta {
   market_wtype?: string;
   market_rtype?: string;
   market_chose_team?: 'H' | 'C' | 'N';
+  spread_gid?: string;  // 盘口专属 gid（用于副盘口）
 }
 
 interface BetFormModalProps {
@@ -78,7 +79,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const [autoSelection, setAutoSelection] = useState<AccountSelectionResponse | null>(null);
   const [autoLoading, setAutoLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [oddsPreview, setOddsPreview] = useState<{ odds: number | null; closed: boolean; message?: string } | null>(null);
+  const [oddsPreview, setOddsPreview] = useState<{ odds: number | null; closed: boolean; message?: string; spreadMismatch?: boolean } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [autoRefreshOdds, setAutoRefreshOdds] = useState(true); // 自动刷新赔率开关
 
@@ -358,6 +359,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       market_wtype: selectionMeta?.market_wtype,
       market_rtype: selectionMeta?.market_rtype,
       market_chose_team: selectionMeta?.market_chose_team,
+      spread_gid: selectionMeta?.spread_gid,  // 盘口专属 gid
     };
 
     if (!silent) {
@@ -628,6 +630,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         market_wtype: selectionMeta?.market_wtype,
         market_rtype: selectionMeta?.market_rtype,
         market_chose_team: selectionMeta?.market_chose_team,
+        spread_gid: selectionMeta?.spread_gid,  // 盘口专属 gid
       };
 
       const response = await betApi.createBet(requestData);

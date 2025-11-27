@@ -264,6 +264,7 @@ export interface BetCreateRequest {
   market_wtype?: string;
   market_rtype?: string;
   market_chose_team?: 'H' | 'C' | 'N';
+  spread_gid?: string;  // 盘口专属 gid（用于副盘口）
 }
 
 // 金币交易类型
