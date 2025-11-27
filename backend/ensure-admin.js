@@ -15,9 +15,11 @@ async function main() {
 
   const client = await pool.connect();
   try {
+    // ========== 修改这里设置管理员账号密码 ==========
     const username = 'admin';
     const email = 'admin@zhitou.com';
-    const plain = '123456';
+    const plain = 'Admin@2024';  // 修改为你想要的密码
+    // =============================================
     const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
     const hash = await bcrypt.hash(plain, rounds);
 

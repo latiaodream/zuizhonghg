@@ -80,12 +80,11 @@ if [ -d "$MIGRATION_DIR" ]; then
 fi
 echo -e "${GREEN}迁移完成${NC}"
 
+echo -e "\n${YELLOW}[4/4] 创建管理员账号...${NC}"
+cd "$PROJECT_DIR/backend"
+node ensure-admin.js
+
 echo -e "\n${GREEN}========================================${NC}"
 echo -e "${GREEN}  数据库初始化完成！${NC}"
 echo -e "${GREEN}========================================${NC}"
-echo ""
-echo "默认管理员账号:"
-echo "  用户名: admin"
-echo "  邮箱: admin@example.com"
-echo "  密码: 需要通过代码重置或直接修改数据库"
 

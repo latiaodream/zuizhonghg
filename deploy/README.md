@@ -51,10 +51,10 @@ bash deploy/init-db.sh
 
 # 启动服务
 cd backend
-pm2 start npm --name "bclogin-backend" -- start
+pm2 start npm --name "zhitou-api" -- start
 
 # 查看日志
-pm2 logs bclogin-backend
+pm2 logs zhitou-api
 ```
 
 ### 3. Nginx 配置
@@ -70,13 +70,13 @@ pm2 logs bclogin-backend
 pm2 status
 
 # 重启后端
-pm2 restart bclogin-backend
+pm2 restart zhitou-api
 
 # 查看日志
-pm2 logs bclogin-backend
+pm2 logs zhitou-api
 
 # 停止服务
-pm2 stop bclogin-backend
+pm2 stop zhitou-api
 ```
 
 ## 数据库操作
