@@ -16,8 +16,8 @@ NC='\033[0m'
 # 数据库配置
 DB_HOST="127.0.0.1"
 DB_PORT="5432"
-DB_NAME="hgnew"
-DB_USER="hgnew"
+DB_NAME="newhg"
+DB_USER="newhg"
 DB_PASSWORD="GxdNSnmeN6pxTHk4"
 
 # 获取脚本所在目录

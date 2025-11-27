@@ -3,8 +3,8 @@
 ## 服务器信息
 - 部署目录: `/www/wwwroot/www.aibcbot.top`
 - 数据库: PostgreSQL
-  - 数据库名: `hgnew`
-  - 用户名: `hgnew`
+  - 数据库名: `newhg`
+  - 用户名: `newhg`
   - 密码: `GxdNSnmeN6pxTHk4`
 
 ## 部署步骤
@@ -83,7 +83,7 @@ pm2 stop zhitou-api
 
 ```bash
 # 连接数据库
-psql -h 127.0.0.1 -U hgnew -d hgnew
+psql -h 127.0.0.1 -U newhg -d newhg
 
 # 重建数据库（会清空所有数据）
 bash deploy/init-db.sh
