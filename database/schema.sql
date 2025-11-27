@@ -66,6 +66,7 @@ CREATE TABLE crown_accounts (
     display_name VARCHAR(100), -- 显示名称，如: G1aokloz (cfax5g2hoz)
     original_username VARCHAR(100), -- 原始账号（首次登录时的账号）
     initialized_username VARCHAR(100), -- 修改后的账号（初始化后使用的账号）
+    init_type VARCHAR(20) DEFAULT 'auto', -- 初始化方式: auto, manual
 
     -- 平台信息
     platform VARCHAR(50) DEFAULT '皇冠',
@@ -102,6 +103,7 @@ CREATE TABLE crown_accounts (
     football_live_limit DECIMAL(15,2) DEFAULT 100000, -- 足球滚球限额
     basketball_prematch_limit DECIMAL(15,2) DEFAULT 100000, -- 篮球赛前限额
     basketball_live_limit DECIMAL(15,2) DEFAULT 100000, -- 篮球滚球限额
+    limits_data JSONB, -- 详细限额数据
 
     -- 状态管理
     is_enabled BOOLEAN DEFAULT true, -- 启用状态
@@ -258,6 +260,7 @@ CREATE TABLE league_aliases (
     name_en VARCHAR(200),
     name_zh_cn VARCHAR(200),
     name_zh_tw VARCHAR(200),
+    name_crown_zh_cn VARCHAR(200),
     aliases JSONB DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -270,6 +273,7 @@ CREATE TABLE team_aliases (
     name_en VARCHAR(200),
     name_zh_cn VARCHAR(200),
     name_zh_tw VARCHAR(200),
+    name_crown_zh_cn VARCHAR(200),
     aliases JSONB DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
