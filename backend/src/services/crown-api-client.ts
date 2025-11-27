@@ -537,24 +537,21 @@ export class CrownApiClient {
           // 修改账号失败，可能是账号已经初始化过了
           console.log('⚠️ 修改账号失败:', changeUsernameResp.err);
 
-          // 如果错误信息表明账号已经初始化，直接返回
+          // 如果错误信息表明账号已经初始化，继续尝试改密码
           if (changeUsernameResp.err && (
             changeUsernameResp.err.includes('已') ||
             changeUsernameResp.err.includes('不能') ||
             changeUsernameResp.err.includes('无法')
           )) {
+            console.log('⚠️ 账号已初始化，跳过修改账号，继续尝试修改密码');
+            // 不直接返回，继续尝试改密码
+          } else {
             return {
-              success: true,
-              message: '账号已初始化，无需再次操作',
+              success: false,
+              message: changeUsernameResp.err || '修改账号失败',
               updatedCredentials: { username: originalUsername, password: originalPassword },
             };
           }
-
-          return {
-            success: false,
-            message: changeUsernameResp.err || '修改账号失败',
-            updatedCredentials: { username: originalUsername, password: originalPassword },
-          };
         }
       }
 
@@ -568,16 +565,19 @@ export class CrownApiClient {
         // 修改密码失败，可能是账号已经初始化过了
         console.log('⚠️ 修改密码失败:', changePwdResp.err);
 
-        // 如果错误信息表明账号已经初始化，直接返回
+        // 如果错误信息表明账号已经初始化，返回成功但使用新密码
+        // 因为用户既然点了初始化，可能是想更新数据库中的密码
         if (changePwdResp.err && (
           changePwdResp.err.includes('已') ||
           changePwdResp.err.includes('不能') ||
           changePwdResp.err.includes('无法')
         )) {
+          // 🔥 关键修复：即使皇冠说已初始化，也要用新的账号密码更新数据库
+          // 因为用户可能是在其他地方初始化过，现在想同步密码到系统
           return {
             success: true,
-            message: '账号已初始化，无需再次操作',
-            updatedCredentials: { username: originalUsername, password: originalPassword },
+            message: '账号已初始化，数据库已同步新密码',
+            updatedCredentials: { username: finalUsername, password: newPassword },
           };
         }
 

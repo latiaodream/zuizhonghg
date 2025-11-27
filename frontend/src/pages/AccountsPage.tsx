@@ -24,6 +24,7 @@ import { generateAccountUsername, generateAccountPassword } from '../utils/crede
 import AccountFormModal from '../components/Accounts/AccountFormModal';
 import AccountDetailModal from '../components/Accounts/AccountDetailModal';
 import AccountCard from '../components/Accounts/AccountCard';
+import AccountInitializeModal from '../components/Accounts/AccountInitializeModal';
 import type { AxiosError } from 'axios';
 
 const { Title, Text } = Typography;
@@ -50,8 +51,11 @@ const AccountsPage: React.FC = () => {
   // 模态框状态
   const [formModalVisible, setFormModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [initializeModalVisible, setInitializeModalVisible] = useState(false);
   const [editingAccount, setEditingAccount] = useState<CrownAccount | null>(null);
   const [viewingAccount, setViewingAccount] = useState<CrownAccount | null>(null);
+  const [initializingAccount, setInitializingAccount] = useState<CrownAccount | null>(null);
+  const [initCredentials, setInitCredentials] = useState({ username: '', password: '' });
 
   useEffect(() => {
     loadGroups();
@@ -216,10 +220,64 @@ const AccountsPage: React.FC = () => {
         message.success({ content: `账号 ${account.username} 登录成功`, key, duration: 2 });
         await loadAccounts();
       } else {
-        message.error({ content: response.error || '登录失败', key, duration: 3 });
+        // 🔥 检查是否需要初始化
+        const data = response.data as { needsInitialization?: boolean } | undefined;
+        if (data?.needsInitialization) {
+          message.warning({ content: '账号需要初始化，正在打开初始化窗口...', key, duration: 2 });
+          handleOpenInitialize(account);
+        } else {
+          message.error({ content: response.error || '登录失败', key, duration: 3 });
+        }
       }
     } catch (error: any) {
-      message.error({ content: error.response?.data?.error || '登录失败', key, duration: 3 });
+      // 🔥 检查是否需要初始化
+      const respData = error.response?.data;
+      if (respData?.data?.needsInitialization) {
+        message.warning({ content: '账号需要初始化，正在打开初始化窗口...', key: key, duration: 2 });
+        handleOpenInitialize(account);
+      } else {
+        message.error({ content: respData?.error || '登录失败', key, duration: 3 });
+      }
+    }
+  };
+
+  // 打开初始化模态框
+  const handleOpenInitialize = (account: CrownAccount) => {
+    setInitializingAccount(account);
+    setInitCredentials({
+      username: generateAccountUsername(),
+      password: generateAccountPassword(),
+    });
+    setInitializeModalVisible(true);
+  };
+
+  // 执行初始化
+  const handleInitializeAccount = async (payload: { username: string; password: string }) => {
+    if (!initializingAccount) return;
+
+    const key = `init-${initializingAccount.id}`;
+    try {
+      message.loading({ content: `正在初始化账号 ${initializingAccount.username}...`, key, duration: 0 });
+      const response = await crownApi.initializeAccountWithApi(initializingAccount.id, payload);
+      if (response.success) {
+        message.success({ content: `账号初始化成功！新账号: ${payload.username}`, key, duration: 3 });
+        setInitializeModalVisible(false);
+        setInitializingAccount(null);
+        await loadAccounts();
+      } else {
+        message.error({ content: response.error || '初始化失败', key, duration: 3 });
+      }
+    } catch (error: any) {
+      message.error({ content: error.response?.data?.error || '初始化失败', key, duration: 3 });
+    }
+  };
+
+  // 重新生成凭证
+  const handleRegenerateCredential = (field: 'username' | 'password') => {
+    if (field === 'username') {
+      setInitCredentials(prev => ({ ...prev, username: generateAccountUsername() }));
+    } else {
+      setInitCredentials(prev => ({ ...prev, password: generateAccountPassword() }));
     }
   };
 
@@ -671,6 +729,7 @@ const AccountsPage: React.FC = () => {
                 onLogout={handleLogoutAccount}
                 onRefresh={handleRefreshBalance}
                 onCheckHistory={handleCheckHistory}
+                onInitialize={handleOpenInitialize}
               />
             ))}
           </div>
@@ -706,6 +765,20 @@ const AccountsPage: React.FC = () => {
           setDetailModalVisible(false);
           handleEditAccount(account);
         }}
+      />
+
+      {/* 初始化账号模态框 */}
+      <AccountInitializeModal
+        open={initializeModalVisible}
+        account={initializingAccount}
+        onCancel={() => {
+          setInitializeModalVisible(false);
+          setInitializingAccount(null);
+        }}
+        onSubmit={handleInitializeAccount}
+        credentials={initCredentials}
+        onCredentialsChange={(values) => setInitCredentials(prev => ({ ...prev, ...values }))}
+        onRegenerate={handleRegenerateCredential}
       />
     </div>
   );
