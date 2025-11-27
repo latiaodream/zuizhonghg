@@ -8173,16 +8173,23 @@ export class CrownAutomationService {
 
       const result = this.parseMoreMarketsFromXml(xml);
 
-      // 存入 Redis 缓存
-      if (redis.isAvailable()) {
+      // 只有在成功获取到数据时才缓存（避免缓存空数据）
+      const hasData = result.handicapLines.length > 0 ||
+                      result.overUnderLines.length > 0 ||
+                      result.halfHandicapLines.length > 0 ||
+                      result.halfOverUnderLines.length > 0;
+
+      if (hasData && redis.isAvailable()) {
         try {
           // 滚球缓存 2 分钟，今日缓存 5 分钟
           const ttl = showtype === 'live' ? 120 : 300;
           await redis.setex(cacheKey, ttl, JSON.stringify(result));
-          console.log(`✅ Redis 缓存已保存: ${params.gid} (TTL: ${ttl}s)`);
+          console.log(`✅ Redis 缓存已保存: ${params.gid} (TTL: ${ttl}s, 让球=${result.handicapLines.length}, 大小=${result.overUnderLines.length})`);
         } catch (error) {
           console.error('❌ Redis 写入失败:', error);
         }
+      } else if (!hasData) {
+        console.log(`⚠️ get_game_more 返回空数据，不缓存: ${params.gid}`);
       }
 
       return result;
