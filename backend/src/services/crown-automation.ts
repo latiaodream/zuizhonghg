@@ -7215,8 +7215,11 @@ export class CrownAutomationService {
       HOUHO: ['HROUHO', 'HROU'],
       HROUCO: ['HROU', 'HOUCO', 'HOU'],
       HOUCO: ['HROUCO', 'HROU'],
-      HRM: ['HM'],
-      HM: ['HRM'],
+	      // 半场独赢相关：官方抓包里 `FT_order_view` 使用 wtype=HR
+	      // 现有实现用 HRM/HM 表示半场独赢，这里增加 HR 作为额外 fallback，
+	      // 这样在预览赔率时会依次尝试 HRM → HM → HR，对齐实际接口行为。
+	      HRM: ['HM', 'HR'],
+	      HM: ['HRM', 'HR'],
     };
 
     const variants: Array<{ wtype: string; rtype: string; chose_team: string }> = [];
