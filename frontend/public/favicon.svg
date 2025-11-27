@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background Circle with Gradient -->
+  <circle cx="64" cy="64" r="60" fill="url(#bgGradient)" filter="url(#shadow)"/>
+  
+  <!-- Soccer Ball Icon -->
+  <g transform="translate(64, 64)">
+    <!-- Pentagon in center -->
+    <path d="M 0,-18 L 17,-5.5 L 10.5,14.5 L -10.5,14.5 L -17,-5.5 Z" 
+          fill="url(#iconGradient)" 
+          stroke="#ffffff" 
+          stroke-width="2.5"/>
+    
+    <!-- Top hexagon segments -->
+    <path d="M 0,-18 L 17,-5.5 L 17,-28 L 0,-35 Z" 
+          fill="#ffffff" 
+          opacity="0.9"/>
+    <path d="M 0,-18 L -17,-5.5 L -17,-28 L 0,-35 Z" 
+          fill="#ffffff" 
+          opacity="0.75"/>
+    
+    <!-- Right hexagon segments -->
+    <path d="M 17,-5.5 L 10.5,14.5 L 28,14.5 L 32,-5.5 Z" 
+          fill="#ffffff" 
+          opacity="0.85"/>
+    
+    <!-- Left hexagon segments -->
+    <path d="M -17,-5.5 L -10.5,14.5 L -28,14.5 L -32,-5.5 Z" 
+          fill="#ffffff" 
+          opacity="0.7"/>
+    
+    <!-- Bottom hexagon segments -->
+    <path d="M 10.5,14.5 L -10.5,14.5 L -10.5,32 L 10.5,32 Z" 
+          fill="#ffffff" 
+          opacity="0.8"/>
+  </g>
+  
+  <!-- Crown accent (representing 皇冠) -->
+  <g transform="translate(64, 28)">
+    <path d="M -12,0 L -8,-8 L -4,0 L 0,-10 L 4,0 L 8,-8 L 12,0 L 12,4 L -12,4 Z" 
+          fill="url(#iconGradient)" 
+          stroke="#ffffff" 
+          stroke-width="1.5"
+          opacity="0.95"/>
+    <circle cx="-8" cy="-8" r="2" fill="#ffffff"/>
+    <circle cx="0" cy="-10" r="2.5" fill="#ffffff"/>
+    <circle cx="8" cy="-8" r="2" fill="#ffffff"/>
+  </g>
+</svg>
+

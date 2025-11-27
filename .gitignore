@@ -1,0 +1,110 @@
+# Node.js
+node_modules/
+.npm/
+
+# Build outputs
+dist/
+frontend/dist/
+backend/dist/
+fetcher-isports/dist/
+
+# Env & secrets
+backend/.env
+backend/.env.local
+backend/.env.*
+fetcher/.env
+fetcher-isports/.env
+.env
+database/*.sqlite
+database/*.db
+
+# Logs
+*.log
+logs/
+backend/*-debug.log
+
+# PID / runtime
+*.pid
+backend/tmp/
+
+# Playwright/automation artifacts
+passcodeCtx-*
+debug-*
+bet-error-*
+init-*-raw.log
+siweima*.html
+view-source_*
+创建账号界面.htm
+修改密码页面.htm
+四位.md
+下注元素*.md
+余额.md
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.claude/
+.factory/
+
+# Misc
+*.bak
+*.tmp
+*.swp
+
+# ========== 不需要上传的文件 ==========
+
+# 旧的/临时文档
+*.md
+!README.md
+!deploy/README.md
+!fetcher/README.md
+!fetcher/DEPLOY.md
+!fetcher/QUICK_START.md
+!fetcher/CHANGELOG.md
+
+# 临时数据文件
+data/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!ecosystem.config.js
+*.xml
+
+# 临时脚本和测试
+test-*.js
+test-*.ts
+compare-*.js
+scripts/test-*.js
+
+# 旧的部署脚本
+deploy.js
+deploy.sh
+deploy-*.sh
+update*.sh
+server-*.sh
+backup-*.sh
+check-*.sh
+cleanup-*.sh
+
+# 抓包/调试文件
+captures/
+exports/
+足球图片/
+wss.md
+
+# 中文文档
+下注介绍.md
+宝塔*.md
+服务器*.md
+
+# nginx 配置（服务器上单独配置）
+nginx-*.conf
+
+# 其他
+out.json
+isports-*.json
+live-*.json
+matches-*.xml
