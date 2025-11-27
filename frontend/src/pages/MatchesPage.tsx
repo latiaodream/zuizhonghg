@@ -346,6 +346,7 @@ const MatchesPage: React.FC = () => {
   const openBetModal = (matchData: any, selection: SelectionMeta) => {
     // 自动添加 lid（联赛ID）
     const lid = matchData.lid || matchData.league_id || matchData.raw?.game?.LID || matchData._rawGame?.LID;
+    console.log('🔍 openBetModal matchData.lid:', matchData.lid, 'matchData.league_id:', matchData.league_id, '提取的lid:', lid);
     const selectionWithLid = { ...selection, lid };
     setSelectedMatch(convertMatch(matchData));
     setSelectionPreset(selectionWithLid);
