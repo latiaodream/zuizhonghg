@@ -6637,7 +6637,53 @@ export class CrownAutomationService {
 
     // 提取盘口线参数和盘口专属 gid
     const spreadValue = betRequest.market_line ?? betRequest.marketLine ?? '';
-    const spreadGid = betRequest.spread_gid ?? betRequest.spreadGid ?? '';
+    let spreadGid = betRequest.spread_gid ?? betRequest.spreadGid ?? '';
+
+    // 如果指定了盘口线但没有 spread_gid，尝试从 get_game_more 查询对应的 gid
+    if (spreadValue && !spreadGid) {
+      console.log('🔍 未提供 spread_gid，尝试从 get_game_more 查询副盘口 gid...');
+      try {
+        const moreMarkets = await this.fetchMoreMarkets({
+          gid: crownMatchId,
+          showtype: 'live',  // 假设是滚球，可以根据实际情况调整
+          gtype: 'ft',
+          accountId,
+        });
+
+        // 根据 wtype 判断是让球还是大小
+        const isOverUnder = effectiveParams.wtype?.toUpperCase().includes('OU');
+        const isHandicap = effectiveParams.wtype?.toUpperCase().includes('RE') || effectiveParams.wtype?.toUpperCase().includes('R');
+        const isHalf = effectiveParams.wtype?.toUpperCase().startsWith('H');
+
+        let targetLines: any[] = [];
+        if (isHalf) {
+          targetLines = isOverUnder ? moreMarkets.halfOverUnderLines : moreMarkets.halfHandicapLines;
+        } else {
+          targetLines = isOverUnder ? moreMarkets.overUnderLines : moreMarkets.handicapLines;
+        }
+
+        // 标准化盘口线格式（去掉空格、统一 / 分隔符）
+        const normalizeSpread = (s: string) => String(s || '').replace(/\s+/g, '').replace(/\//g, '/');
+        const targetSpread = normalizeSpread(spreadValue);
+
+        // 查找匹配的盘口线
+        const matchedLine = targetLines.find(line => {
+          const lineValue = normalizeSpread(line.line || line.hdp || '');
+          return lineValue === targetSpread;
+        });
+
+        if (matchedLine?.gid) {
+          spreadGid = matchedLine.gid;
+          console.log(`✅ 从 get_game_more 找到副盘口 gid: ${spreadGid} (盘口线: ${spreadValue})`);
+        } else {
+          console.log(`⚠️ 未找到盘口线 ${spreadValue} 对应的 gid，可用盘口:`,
+            targetLines.map(l => `${l.line || l.hdp}(gid=${l.gid})`).join(', '));
+        }
+      } catch (error) {
+        console.error('❌ 查询 get_game_more 失败:', error);
+      }
+    }
+
     // 优先使用盘口专属 gid（用于副盘口），否则使用主比赛 gid
     const effectiveGid = spreadGid || crownMatchId;
     console.log('📊 盘口线:', spreadValue || '未指定');
