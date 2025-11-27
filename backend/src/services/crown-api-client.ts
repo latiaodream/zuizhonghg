@@ -943,11 +943,11 @@ export class CrownApiClient {
 
         // 处理已知的错误代码
         if (errorText === 'CheckEMNU' || errorText.includes('CheckEMNU')) {
-          console.log('❌ 盘口已封盘，无法获取赔率');
+          console.log('❌ 会话无效 (CheckEMNU)，需要重新登录');
           return {
             success: false,
-            code: 'MARKET_CLOSED',
-            message: '盘口已封盘，无法下注。请选择其他赛事或等待盘口重新开放。',
+            code: 'SESSION_EXPIRED',
+            message: '会话已过期或无效，请重新登录账号。',
           };
         }
 
