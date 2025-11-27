@@ -6627,6 +6627,10 @@ export class CrownAutomationService {
 
     console.log(`✅ 最终使用的参数:`, effectiveParams);
 
+	    const matchStatusRaw = betRequest.match_status ?? betRequest.matchStatus;
+	    const matchStatus = (matchStatusRaw ?? '').toString().toLowerCase();
+	    const isLiveMatch = matchStatus === 'live';
+
     const variants = this.buildBetVariants(effectiveParams);
 
     let oddsResult: any = null;
@@ -6649,12 +6653,14 @@ export class CrownAutomationService {
         console.log('⚠️ 未提供联赛ID (lid)，无法查询 get_game_more');
       } else {
         try {
-          const moreMarkets = await this.fetchMoreMarkets({
-            gid: crownMatchId,
-            lid: lid,
-            showtype: 'live',  // 假设是滚球，可以根据实际情况调整
-            gtype: 'ft',
-          });
+	          const showtype = isLiveMatch ? 'live' : 'today';
+	          console.log(`🔍 调用 get_game_more 参数:`, { gid: crownMatchId, lid, showtype });
+	          const moreMarkets = await this.fetchMoreMarkets({
+	            gid: crownMatchId,
+	            lid: lid,
+	            showtype,
+	            gtype: 'ft',
+	          });
 
         // 根据 wtype 判断是让球还是大小
         const isOverUnder = effectiveParams.wtype?.toUpperCase().includes('OU');
@@ -6700,14 +6706,13 @@ export class CrownAutomationService {
     for (const variant of variants) {
       console.log('🎯 尝试获取赔率组合:', variant, '盘口线:', spreadValue || '(主盘口)', 'gid:', effectiveGid);
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        console.log(`🔄 获取赔率 [${variant.wtype}/${variant.rtype}] gid=${effectiveGid} spread=${spreadValue || '主盘口'} 尝试 ${attempt}/${maxRetries}`);
-        oddsResult = await apiClient.getLatestOdds({
-          gid: effectiveGid,
-          gtype: 'FT',
-          wtype: variant.wtype,
-          chose_team: variant.chose_team,
-          spread: spreadValue || undefined,  // 传递盘口线参数
-        });
+	        console.log(`🔄 获取赔率 [${variant.wtype}/${variant.rtype}] gid=${effectiveGid} 尝试 ${attempt}/${maxRetries}`);
+	        oddsResult = await apiClient.getLatestOdds({
+	          gid: effectiveGid,
+	          gtype: 'FT',
+	          wtype: variant.wtype,
+	          chose_team: variant.chose_team,
+	        });
 
         if (oddsResult.success) {
           selectedVariant = variant;

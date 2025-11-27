@@ -64,8 +64,9 @@ const formatHandicapValue = (value: number | null): string => {
   return `${sign}${str}`;
 };
 
-const convertMatch = (matchData: any): MatchType => {
+const convertMatch = (matchData: any, showType: 'live' | 'today' | 'early'): MatchType => {
   const nowIso = new Date().toISOString();
+  const status: MatchType['status'] = showType === 'live' ? 'live' : 'scheduled';
   return {
     id: Number(matchData.gid) || 0,
     match_id: String(matchData.gid || nowIso),
@@ -73,7 +74,7 @@ const convertMatch = (matchData: any): MatchType => {
     home_team: matchData.home || '',
     away_team: matchData.away || '',
     match_time: matchData.time || nowIso,
-    status: 'live',
+    status,
     current_score: matchData.score || '',
     match_period: [matchData.period, matchData.clock].filter(Boolean).join(' '),
     markets: matchData.markets || {},
@@ -350,7 +351,7 @@ const MatchesPage: React.FC = () => {
     console.log('🔍 openBetModal selection:', selection);
     console.log('🔍 openBetModal selection.spread_gid:', selection.spread_gid, 'selection.market_line:', selection.market_line);
     const selectionWithLid = { ...selection, lid };
-    setSelectedMatch(convertMatch(matchData));
+	    setSelectedMatch(convertMatch(matchData, showtype));
     setSelectionPreset(selectionWithLid);
     setBetModalKey((prev) => prev + 1);
     setBetModalVisible(true);

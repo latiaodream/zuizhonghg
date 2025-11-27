@@ -341,28 +341,32 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     const betOptionValue = currentValues.bet_option ?? defaultSelection?.bet_option ?? '主队';
     const oddsValue = currentValues.odds ?? defaultSelection?.odds ?? 1;
 
-    const payload = {
-      account_id: accountId,
-      match_id: match.id,
-      crown_match_id: match.crown_gid || match.gid || match.match_id,
-      bet_type: betTypeValue,
-      bet_option: betOptionValue,
-      odds: oddsValue,
-      bet_amount: currentValues.bet_amount ?? 0,
-      league_name: match.league_name,
-      home_team: match.home_team,
-      away_team: match.away_team,
-      market_category: selectionMeta?.market_category,
-      market_scope: selectionMeta?.market_scope,
-      market_side: selectionMeta?.market_side,
-      market_line: selectionMeta?.market_line,
-      market_index: selectionMeta?.market_index,
-      market_wtype: selectionMeta?.market_wtype,
-      market_rtype: selectionMeta?.market_rtype,
-      market_chose_team: selectionMeta?.market_chose_team,
-      spread_gid: selectionMeta?.spread_gid,  // 盘口专属 gid
-      lid: selectionMeta?.lid,  // 联赛 ID（用于 get_game_more 查询副盘口）
-    };
+	    const payload = {
+	      account_id: accountId,
+	      match_id: match.id,
+	      crown_match_id: match.crown_gid || match.gid || match.match_id,
+	      bet_type: betTypeValue,
+	      bet_option: betOptionValue,
+	      odds: oddsValue,
+	      bet_amount: currentValues.bet_amount ?? 0,
+	      league_name: match.league_name,
+	      home_team: match.home_team,
+	      away_team: match.away_team,
+	      match_time: match.match_time,
+	      match_status: match.status,
+	      current_score: match.current_score,
+	      match_period: match.match_period,
+	      market_category: selectionMeta?.market_category,
+	      market_scope: selectionMeta?.market_scope,
+	      market_side: selectionMeta?.market_side,
+	      market_line: selectionMeta?.market_line,
+	      market_index: selectionMeta?.market_index,
+	      market_wtype: selectionMeta?.market_wtype,
+	      market_rtype: selectionMeta?.market_rtype,
+	      market_chose_team: selectionMeta?.market_chose_team,
+	      spread_gid: selectionMeta?.spread_gid,  // 盘口专属 gid
+	      lid: selectionMeta?.lid,  // 联赛 ID（用于 get_game_more 查询副盘口）
+	    };
 
     if (!silent) {
       setPreviewLoading(true);
@@ -400,23 +404,47 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         return { success: true, data: previewData };
       }
 
-      const msg = response.error || response.message || '获取赔率失败';
-      if (!silent) {
-        setPreviewError(msg);
-      }
-      setOddsPreview(response.data?.closed ? {
-        odds: response.data.odds ?? null,
-        closed: true,
-        message: msg,
-      } : null);
-      return { success: false, message: msg, data: response.data };
+	      const msg = response.error || response.message || '获取赔率失败';
+	      if (!silent) {
+	        setPreviewError(msg);
+	      }
+	      if (response.data?.closed) {
+	        setOddsPreview({
+	          odds: response.data.odds ?? null,
+	          closed: true,
+	          message: msg,
+	        });
+	      } else if (derived) {
+	        setOddsPreview({
+	          odds: derived.odds ?? null,
+	          closed: false,
+	          message: derived.message || '本地盘口赔率（皇冠预览失败）',
+	        });
+	        if (derived.odds !== null && derived.odds !== undefined) {
+	          form.setFieldValue('odds', derived.odds);
+	        }
+	      } else {
+	        setOddsPreview(null);
+	      }
+	      return { success: false, message: msg, data: response.data };
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || '获取赔率失败';
-      if (!silent) {
-        setPreviewError(msg);
-      }
-      setOddsPreview(null);
-      return { success: false, message: msg };
+	      const msg = error?.response?.data?.error || error?.message || '获取赔率失败';
+	      if (!silent) {
+	        setPreviewError(msg);
+	      }
+	      if (derived) {
+	        setOddsPreview({
+	          odds: derived.odds ?? null,
+	          closed: false,
+	          message: derived.message || '本地盘口赔率（皇冠预览失败）',
+	        });
+	        if (derived.odds !== null && derived.odds !== undefined) {
+	          form.setFieldValue('odds', derived.odds);
+	        }
+	      } else {
+	        setOddsPreview(null);
+	      }
+	      return { success: false, message: msg };
     } finally {
       if (!silent) {
         setPreviewLoading(false);
