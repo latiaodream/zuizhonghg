@@ -6647,7 +6647,6 @@ export class CrownAutomationService {
           gid: crownMatchId,
           showtype: 'live',  // 假设是滚球，可以根据实际情况调整
           gtype: 'ft',
-          accountId,
         });
 
         // 根据 wtype 判断是让球还是大小
