@@ -57,6 +57,8 @@ interface BetRequest {
   marketChoseTeam?: string;
   spread_gid?: string;  // 盘口专属 gid（用于副盘口）
   spreadGid?: string;
+  lid?: string;  // 联赛 ID
+  league_id?: string;
 }
 
 interface CrownLoginResult {
@@ -6642,12 +6644,17 @@ export class CrownAutomationService {
     // 如果指定了盘口线但没有 spread_gid，尝试从 get_game_more 查询对应的 gid
     if (spreadValue && !spreadGid) {
       console.log('🔍 未提供 spread_gid，尝试从 get_game_more 查询副盘口 gid...');
-      try {
-        const moreMarkets = await this.fetchMoreMarkets({
-          gid: crownMatchId,
-          showtype: 'live',  // 假设是滚球，可以根据实际情况调整
-          gtype: 'ft',
-        });
+      const lid = betRequest.lid || betRequest.league_id;
+      if (!lid) {
+        console.log('⚠️ 未提供联赛ID (lid)，无法查询 get_game_more');
+      } else {
+        try {
+          const moreMarkets = await this.fetchMoreMarkets({
+            gid: crownMatchId,
+            lid: lid,
+            showtype: 'live',  // 假设是滚球，可以根据实际情况调整
+            gtype: 'ft',
+          });
 
         // 根据 wtype 判断是让球还是大小
         const isOverUnder = effectiveParams.wtype?.toUpperCase().includes('OU');
@@ -6678,8 +6685,9 @@ export class CrownAutomationService {
           console.log(`⚠️ 未找到盘口线 ${spreadValue} 对应的 gid，可用盘口:`,
             targetLines.map(l => `${l.line || l.hdp}(gid=${l.gid})`).join(', '));
         }
-      } catch (error) {
-        console.error('❌ 查询 get_game_more 失败:', error);
+        } catch (error) {
+          console.error('❌ 查询 get_game_more 失败:', error);
+        }
       }
     }
 

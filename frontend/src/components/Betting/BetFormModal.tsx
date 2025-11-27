@@ -42,6 +42,7 @@ export interface SelectionMeta {
   market_rtype?: string;
   market_chose_team?: 'H' | 'C' | 'N';
   spread_gid?: string;  // 盘口专属 gid（用于副盘口）
+  lid?: string;  // 联赛 ID
 }
 
 interface BetFormModalProps {
@@ -360,6 +361,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       market_rtype: selectionMeta?.market_rtype,
       market_chose_team: selectionMeta?.market_chose_team,
       spread_gid: selectionMeta?.spread_gid,  // 盘口专属 gid
+      lid: selectionMeta?.lid,  // 联赛 ID（用于 get_game_more 查询副盘口）
     };
 
     if (!silent) {

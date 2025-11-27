@@ -344,8 +344,11 @@ const MatchesPage: React.FC = () => {
   }, [matches, search]);
 
   const openBetModal = (matchData: any, selection: SelectionMeta) => {
+    // 自动添加 lid（联赛ID）
+    const lid = matchData.lid || matchData.league_id || matchData.raw?.game?.LID || matchData._rawGame?.LID;
+    const selectionWithLid = { ...selection, lid };
     setSelectedMatch(convertMatch(matchData));
-    setSelectionPreset(selection);
+    setSelectionPreset(selectionWithLid);
     setBetModalKey((prev) => prev + 1);
     setBetModalVisible(true);
   };
