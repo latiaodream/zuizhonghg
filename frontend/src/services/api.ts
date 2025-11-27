@@ -411,28 +411,30 @@ export const crownApi = {
   ): Promise<ApiResponse> =>
     apiClient.post(`/crown-automation/matches/sync/${accountId}`, undefined, { params, timeout: 120000 }).then(res => res.data),
 
-  // 预览最新赔率
-  previewOdds: (data: {
-    account_id: number;
-    match_id: number;
-    crown_match_id?: string;
-    bet_type: string;
-    bet_option: string;
-    odds?: number;
-    bet_amount?: number;
-    league_name?: string;
-    home_team?: string;
-    away_team?: string;
-  }): Promise<ApiResponse<{
-    odds: number | null;
-    closed?: boolean;
-    message?: string;
-    raw?: any;
-    spread_mismatch?: boolean;
-    requested_line?: string;
-    returned_spread?: string;
-  }>> =>
-    apiClient.post('/crown-automation/odds/preview', data, { timeout: 15000 }).then(res => res.data),
+	  // 预览最新赔率
+	  previewOdds: (data: {
+	    account_id: number;
+	    match_id: number;
+	    crown_match_id?: string;
+	    bet_type: string;
+	    bet_option: string;
+	    odds?: number;
+	    bet_amount?: number;
+	    league_name?: string;
+	    home_team?: string;
+	    away_team?: string;
+	  }): Promise<ApiResponse<{
+	    odds: number | null;
+	    closed?: boolean;
+	    message?: string;
+	    raw?: any;
+	    spread_mismatch?: boolean;
+	    requested_line?: string;
+	    returned_spread?: string;
+	  }>> =>
+	    // 后端在部分盘口上会进行多次重试和 get_game_more 调用，实际响应时间可能超过 15 秒
+	    // 这里将超时时间放宽到 45 秒，避免前端过早超时导致拿不到皇冠返回的成功赔率
+	    apiClient.post('/crown-automation/odds/preview', data, { timeout: 45000 }).then(res => res.data),
 
   // 获取账号额度设置
   getAccountSettings: (accountId: number, gtype?: string): Promise<ApiResponse> =>
