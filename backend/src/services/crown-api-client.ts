@@ -959,13 +959,13 @@ export class CrownApiClient {
           };
         }
 
-        // 处理 VariableStandard 错误（通常表示会话失效或参数错误）
+        // 处理 VariableStandard 错误（通常表示参数错误，如盘口不存在）
         if (errorText === 'VariableStandard' || errorText === 'Variable Standard') {
-          console.log('❌ 收到 VariableStandard 响应，可能是会话失效或参数错误');
+          console.log('❌ 收到 VariableStandard 响应，可能是盘口参数错误或盘口不存在');
           return {
             success: false,
-            code: 'SESSION_EXPIRED',
-            message: '会话已失效或请求参数错误，请重新登录账号。',
+            code: 'INVALID_PARAMS',
+            message: '盘口参数错误或该盘口不存在，请检查盘口线或 GID。',
           };
         }
 

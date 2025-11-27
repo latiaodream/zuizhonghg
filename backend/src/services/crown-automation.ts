@@ -8273,6 +8273,9 @@ export class CrownAutomationService {
       return this.pickString(event, keys);
     };
 
+    // 🔥 提取主盘口的 GID（从 get_game_list 的 event 数据）
+    const eventGid = pick(['GID', 'gid', '@_id']);
+
     const addHandicapLine = (
       target: any[],
       ratioKeys: string[],
@@ -8299,6 +8302,7 @@ export class CrownAutomationService {
           away_rtype: meta?.awayRtype,
           home_chose_team: meta?.homeChoseTeam,
           away_chose_team: meta?.awayChoseTeam,
+          gid: eventGid, // 🔥 添加主盘口 gid
         });
       }
     };
@@ -8332,6 +8336,7 @@ export class CrownAutomationService {
           under_rtype: meta?.underRtype,
           over_chose_team: meta?.overChoseTeam,
           under_chose_team: meta?.underChoseTeam,
+          gid: eventGid, // 🔥 添加主盘口 gid
         });
       }
     };
