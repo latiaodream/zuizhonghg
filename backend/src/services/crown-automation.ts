@@ -8173,9 +8173,13 @@ export class CrownAutomationService {
         isRB,
       };
       if (params.lid) req.lid = String(params.lid);
+      console.log('🔍 [get_game_more] 请求参数:', JSON.stringify(req));
       const xml = await client.getGameMore(req);
 
+      console.log('📥 [get_game_more] 原始响应 (前1500字符):', String(xml || '').substring(0, 1500));
+
       if (typeof xml !== 'string' || xml.trim() === '') {
+        console.log('⚠️ [get_game_more] 响应为空或非字符串');
         return { handicapLines: [], overUnderLines: [], halfHandicapLines: [], halfOverUnderLines: [], halfMoneyline: undefined };
       }
 
