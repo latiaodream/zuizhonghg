@@ -36,9 +36,10 @@ cd /www/wwwroot/www.aibcbot.top
 # 复制环境配置
 cp deploy/env.production backend/.env
 
-# 安装后端依赖
+# 安装后端依赖并编译
 cd backend
-npm install --production
+npm install              # 需要完整安装（含 devDependencies）
+npm run build            # 编译 TypeScript -> dist/
 
 # 安装前端依赖并构建
 cd ../frontend
