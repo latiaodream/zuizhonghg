@@ -6638,11 +6638,19 @@ export class CrownAutomationService {
 
     console.log(`✅ 最终使用的参数:`, effectiveParams);
 
-	    const matchStatusRaw = betRequest.match_status ?? betRequest.matchStatus;
-	    const matchStatus = (matchStatusRaw ?? '').toString().toLowerCase();
-	    const isLiveMatch = matchStatus === 'live';
+		const matchStatusRaw = betRequest.match_status ?? betRequest.matchStatus;
+			const matchStatus = (matchStatusRaw ?? '').toString().toLowerCase();
+			const isLiveMatch = matchStatus === 'live';
 
-    const variants = this.buildBetVariants(effectiveParams);
+		// 市场元信息（用于识别半场独赢等特殊玩法）
+		const marketCategoryRaw = betRequest.market_category ?? betRequest.marketCategory;
+		const marketScopeRaw = betRequest.market_scope ?? betRequest.marketScope;
+		const marketCategory = (marketCategoryRaw ?? '').toString().toLowerCase();
+		const marketScope = (marketScopeRaw ?? '').toString().toLowerCase();
+		const isHalfMoneyline =
+		  marketCategory === 'moneyline' && (marketScope === 'half' || marketScope === '1h');
+
+		const variants = this.buildBetVariants(effectiveParams);
 
     let oddsResult: any = null;
     let selectedVariant: { wtype: string; rtype: string; chose_team: string } | null = null;
@@ -6652,12 +6660,12 @@ export class CrownAutomationService {
     const maxRetries = 3;
     const retryDelay = 2000;
 
-    // 提取盘口线参数和盘口专属 gid
-    const spreadValue = betRequest.market_line ?? betRequest.marketLine ?? '';
-    let spreadGid = betRequest.spread_gid ?? betRequest.spreadGid ?? '';
+		// 提取盘口线参数和盘口专属 gid
+		const spreadValue = betRequest.market_line ?? betRequest.marketLine ?? '';
+		let spreadGid = betRequest.spread_gid ?? betRequest.spreadGid ?? '';
 
-    // 如果指定了盘口线但没有 spread_gid，尝试从 get_game_more 查询对应的 gid
-    if (spreadValue && !spreadGid) {
+		// 如果指定了盘口线但没有 spread_gid，尝试从 get_game_more 查询对应的 gid
+		if (spreadValue && !spreadGid) {
       console.log('🔍 未提供 spread_gid，尝试从 get_game_more 查询副盘口 gid...');
       const lid = betRequest.lid || betRequest.league_id;
       if (!lid) {
@@ -6704,12 +6712,41 @@ export class CrownAutomationService {
         }
         } catch (error) {
           console.error('❌ 查询 get_game_more 失败:', error);
-        }
-      }
-    }
+			}
+		  }
+		}
 
-    // 优先使用盘口专属 gid（用于副盘口），否则使用主比赛 gid
-    const effectiveGid = spreadGid || crownMatchId;
+		// 半场独赢特殊处理：部分比赛在 FT_order_view 中使用 more 盘口的 gid（如 8315672），
+		// 如果目前没有有效的 spread_gid，或 spread_gid 仍然等于主比赛 gid，则尝试从 get_game_more
+		// 的 halfMoneyline 中读取专用 gid，用于调用 FT_order_view。
+		if (isHalfMoneyline && (!spreadGid || spreadGid === crownMatchId)) {
+		  const lid = betRequest.lid || betRequest.league_id;
+		  if (!lid) {
+		    console.log('⚠️ [半场独赢] 未提供联赛ID (lid)，无法查询 get_game_more');
+		  } else {
+		    try {
+		      const showtype = isLiveMatch ? 'live' : 'today';
+		      console.log('🔍 [半场独赢] 调用 get_game_more 参数:', { gid: crownMatchId, lid, showtype });
+		      const moreMarkets = await this.fetchMoreMarkets({
+		        gid: crownMatchId,
+		        lid,
+		        showtype,
+		        gtype: 'ft',
+		      });
+		      if (moreMarkets.halfMoneyline?.gid) {
+		        spreadGid = moreMarkets.halfMoneyline.gid;
+		        console.log(`✅ [半场独赢] 从 get_game_more 使用 halfMoneyline gid: ${spreadGid}`);
+		      } else {
+		        console.log('⚠️ [半场独赢] get_game_more 中未找到 halfMoneyline 对应的 gid');
+		      }
+		    } catch (error) {
+		      console.error('❌ [半场独赢] 查询 get_game_more 失败:', error);
+		    }
+		  }
+		}
+
+		// 优先使用盘口专属 gid（用于副盘口），否则使用主比赛 gid
+		const effectiveGid = spreadGid || crownMatchId;
     console.log('📊 盘口线:', spreadValue || '未指定');
     console.log('📊 盘口专属 GID:', spreadGid || '未指定（使用主 GID）');
     console.log('📊 实际使用 GID:', effectiveGid);
@@ -7778,7 +7815,7 @@ export class CrownAutomationService {
     overUnderLines: any[];
     halfHandicapLines: any[];
     halfOverUnderLines: any[];
-    halfMoneyline?: { home?: string; draw?: string; away?: string };
+    halfMoneyline?: { home?: string; draw?: string; away?: string; gid?: string };
   } {
     try {
       const { XMLParser } = require('fast-xml-parser');
@@ -7812,7 +7849,7 @@ export class CrownAutomationService {
       const handicapLines: any[] = [];
       const overUnderLines: any[] = [];
       const halfHandicapLines: any[] = [];
-      let halfMoneyline: { home?: string; draw?: string; away?: string } | undefined;
+      let halfMoneyline: { home?: string; draw?: string; away?: string; gid?: string } | undefined;
 
       const halfOverUnderLines: any[] = [];
 
@@ -7967,8 +8004,9 @@ export class CrownAutomationService {
         const halfMlAway = this.pickString(game, ['IOR_HRMC', 'ior_HRMC', 'IOR_HMC', 'ior_HMC']);
         if (halfMlHome || halfMlDraw || halfMlAway) {
           const master = this.pickString(game, ['@_master', 'master']);
+          const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
           if (!halfMoneyline || master === 'Y') {
-            halfMoneyline = { home: halfMlHome, draw: halfMlDraw, away: halfMlAway };
+            halfMoneyline = { home: halfMlHome, draw: halfMlDraw, away: halfMlAway, gid: gameGid };
           }
         }
       }
@@ -8117,21 +8155,21 @@ export class CrownAutomationService {
     }
   }
 
-  async fetchMoreMarkets(params: {
-    gid: string;
-    lid?: string;
-    gtype?: string;
-    showtype?: string;
-    ltype?: string;
-    isRB?: string;
-    accountId?: number;
-  }): Promise<{
-    handicapLines: any[];
-    overUnderLines: any[];
-    halfHandicapLines: any[];
-    halfOverUnderLines: any[];
-    halfMoneyline?: { home?: string; draw?: string; away?: string };
-  }> {
+	async fetchMoreMarkets(params: {
+	    gid: string;
+	    lid?: string;
+	    gtype?: string;
+	    showtype?: string;
+	    ltype?: string;
+	    isRB?: string;
+	    accountId?: number;
+	  }): Promise<{
+	    handicapLines: any[];
+	    overUnderLines: any[];
+	    halfHandicapLines: any[];
+	    halfOverUnderLines: any[];
+	    halfMoneyline?: { home?: string; draw?: string; away?: string; gid?: string };
+	  }> {
     const showtype = (params.showtype || 'live').toLowerCase();
     const gtype = params.gtype || 'ft';
     const ltype = params.ltype || '3';
