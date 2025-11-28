@@ -686,13 +686,13 @@ const MatchesPage: React.FC = () => {
                         <div className="market-section">
                           <div className="market-title">独赢(半场)</div>
                           <div className="market-odds-grid moneyline-grid">
-                            <div className="odds-cell" onClick={() => halfMl.home && openBetModal(m, { bet_type: '半场独赢', bet_option: homeLabel, odds: halfMl.home, label: `[半场独赢] ${homeLabel} @${halfMl.home}`, market_category: 'moneyline', market_scope: 'half', market_side: 'home' })}>
+                            <div className="odds-cell" onClick={() => halfMl.home && openBetModal(m, { bet_type: '半场独赢', bet_option: homeLabel, odds: halfMl.home, label: `[半场独赢] ${homeLabel} @${halfMl.home}`, market_category: 'moneyline', market_scope: 'half', market_side: 'home', spread_gid: halfMl.gid })}>
                               {halfMl.home || '-'}
                             </div>
-                            <div className="odds-cell" onClick={() => halfMl.away && openBetModal(m, { bet_type: '半场独赢', bet_option: awayLabel, odds: halfMl.away, label: `[半场独赢] ${awayLabel} @${halfMl.away}`, market_category: 'moneyline', market_scope: 'half', market_side: 'away' })}>
+                            <div className="odds-cell" onClick={() => halfMl.away && openBetModal(m, { bet_type: '半场独赢', bet_option: awayLabel, odds: halfMl.away, label: `[半场独赢] ${awayLabel} @${halfMl.away}`, market_category: 'moneyline', market_scope: 'half', market_side: 'away', spread_gid: halfMl.gid })}>
                               {halfMl.away || '-'}
                             </div>
-                            <div className="odds-cell" onClick={() => halfMl.draw && openBetModal(m, { bet_type: '半场独赢', bet_option: '和局', odds: halfMl.draw, label: `[半场独赢] 和局 @${halfMl.draw}`, market_category: 'moneyline', market_scope: 'half', market_side: 'draw' })}>
+                            <div className="odds-cell" onClick={() => halfMl.draw && openBetModal(m, { bet_type: '半场独赢', bet_option: '和局', odds: halfMl.draw, label: `[半场独赢] 和局 @${halfMl.draw}`, market_category: 'moneyline', market_scope: 'half', market_side: 'draw', spread_gid: halfMl.gid })}>
                               {halfMl.draw || '-'}
                             </div>
                           </div>
