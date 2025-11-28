@@ -8004,9 +8004,14 @@ export class CrownAutomationService {
         const halfMlAway = this.pickString(game, ['IOR_HRMC', 'ior_HRMC', 'IOR_HMC', 'ior_HMC']);
         if (halfMlHome || halfMlDraw || halfMlAway) {
           const master = this.pickString(game, ['@_master', 'master']);
+          // 对于半场玩法，真实用于 FT_order_view 的行级 gid 通常在 HGID/HGID 字段中（例如 <hgid>8315672</hgid>），
+          // 而不是主比赛的 GID（例如 <gid>8315671</gid>）。
+          // 这里优先读取 hgid / HGID，缺失时再退回主 GID，确保 halfMoneyline.gid 尽量与实际下单用的 gid 一致。
+          const halfGameGid = this.pickString(game, ['HGID', 'hgid']);
           const gameGid = this.pickString(game, ['GID', 'gid', '@_id']);
+          const moneylineGid = halfGameGid || gameGid;
           if (!halfMoneyline || master === 'Y') {
-            halfMoneyline = { home: halfMlHome, draw: halfMlDraw, away: halfMlAway, gid: gameGid };
+            halfMoneyline = { home: halfMlHome, draw: halfMlDraw, away: halfMlAway, gid: moneylineGid };
           }
         }
       }
