@@ -83,6 +83,15 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const [oddsPreview, setOddsPreview] = useState<{ odds: number | null; closed: boolean; message?: string; spreadMismatch?: boolean } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [autoRefreshOdds, setAutoRefreshOdds] = useState(true); // 自动刷新赔率开关
+	  // 弹窗拖拽相关状态（仅桌面端使用）
+	  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+	  const [dragState, setDragState] = useState<{
+	    dragging: boolean;
+	    startX: number;
+	    startY: number;
+	    originX: number;
+	    originY: number;
+	  }>({ dragging: false, startX: 0, startY: 0, originX: 0, originY: 0 });
 
   // 监听表单值变化以触发重渲染
   const totalAmount = Form.useWatch('total_amount', form);
@@ -104,6 +113,14 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     if (!getMatchSnapshot) return match;
     return getMatchSnapshot(matchKey) || match;
   }, [matchKey, match, getMatchSnapshot]);
+
+	  // 弹窗关闭时重置拖拽位移
+	  useEffect(() => {
+	    if (!visible) {
+	      setDragOffset({ x: 0, y: 0 });
+	      setDragState(prev => ({ ...prev, dragging: false, originX: 0, originY: 0, startX: 0, startY: 0 }));
+	    }
+	  }, [visible]);
 
   const getLineKey = useCallback((accountId: number): string => {
     const meta = autoSelection?.eligible_accounts.find(entry => entry.account.id === accountId)
@@ -211,34 +228,82 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       return String(value).trim();
     };
 
+    const normalizeGid = (value?: string | number | null) => {
+      if (value === null || value === undefined) return undefined;
+      return String(value).trim();
+    };
+
     const toNumber = (value: any): number | null => {
       if (value === null || value === undefined || value === '') return null;
       const numeric = Number(value);
       return Number.isFinite(numeric) ? numeric : null;
     };
 
-    const pickLineEntry = (lines?: Array<{ line?: string; home?: string; away?: string; over?: string; under?: string }>) => {
-      if (!Array.isArray(lines) || lines.length === 0) return null;
+    const pickLineEntry = (lines?: Array<{ line?: string; home?: string; away?: string; over?: string; under?: string; gid?: string; GID?: string }>): { entry: any | null; notFound: boolean } => {
+      if (!Array.isArray(lines) || lines.length === 0) {
+        return { entry: null, notFound: true };
+      }
+
+      const hasExplicitKey =
+        selectionMeta.market_line !== undefined ||
+        selectionMeta.market_index !== undefined ||
+        selectionMeta.spread_gid !== undefined;
+
+      // 1) 优先使用 spread_gid 精确匹配（针对多盘口的副盘口）
+      if (selectionMeta.spread_gid) {
+        const targetGid = normalizeGid(selectionMeta.spread_gid);
+        const byGid = lines.find((item: any) => {
+          const gid = (item as any).spread_gid || (item as any).gid || (item as any).GID || (item as any).id;
+          return normalizeGid(gid) === targetGid;
+        });
+        if (byGid) {
+          return { entry: byGid, notFound: false };
+        }
+      }
+
+      // 2) 其次按盘口线字符串匹配
       if (selectionMeta.market_line !== undefined) {
         const target = normalizeLine(selectionMeta.market_line);
-        const found = lines.find(item => normalizeLine(item.line) === target);
-        if (found) return found;
+        const byLine = lines.find((item: any) => {
+          const raw = (item as any).line ?? (item as any).hdp ?? (item as any).ratio;
+          return normalizeLine(raw) === target;
+        });
+        if (byLine) {
+          return { entry: byLine, notFound: false };
+        }
       }
-      // 角球盘口不使用 market_index，因为索引是合并后的数组索引
+
+      // 3) 非角球盘口可以按索引兜底（数组位置未变化的情况）
       if (!isCornerFull && !isCornerHalf && selectionMeta.market_index !== undefined && Number.isFinite(selectionMeta.market_index)) {
-        const entry = lines[selectionMeta.market_index as number];
-        if (entry) return entry;
+        const idx = selectionMeta.market_index as number;
+        if (idx >= 0 && idx < lines.length) {
+          return { entry: lines[idx], notFound: false };
+        }
       }
-      return lines[0];
+
+      if (hasExplicitKey) {
+        // 用户是从某个具体盘口进来的，但当前盘口列表中已经找不到对应盘口：视为该盘口已关闭
+        return { entry: null, notFound: true };
+      }
+
+      // 兼容老逻辑：没有任何定位信息时，退回主盘口
+      return { entry: lines[0], notFound: false };
     };
 
-    const buildResponse = (value: any) => {
+    const buildResponse = (value: any, extra?: { closed?: boolean; message?: string }) => {
       const numeric = toNumber(value);
       return {
         odds: numeric,
-        message: 'iSports 实时赔率',
+        closed: !!extra?.closed,
+        message: extra?.message || 'iSports 实时赔率',
       };
     };
+
+    const buildClosedResponse = (reason?: string) => ({
+      odds: null,
+      closed: true,
+      message: reason || '盘口已关闭',
+    });
 
     if (category === 'moneyline') {
       const ml = scope === 'half'
@@ -266,8 +331,13 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         // 普通全场让球
         lines = markets?.full?.handicapLines || (markets?.handicap ? [markets.handicap] : []);
       }
-      const entry = pickLineEntry(lines);
-      if (!entry) return null;
+      const { entry, notFound } = pickLineEntry(lines);
+      if (!entry) {
+        if (notFound) {
+          return buildClosedResponse('盘口已关闭（未找到对应盘口）');
+        }
+        return null;
+      }
       const value = side === 'away' ? entry.away : entry.home;
       return buildResponse(value);
     }
@@ -289,8 +359,13 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         // 普通全场大小
         lines = markets?.full?.overUnderLines || (markets?.ou ? [markets.ou] : []);
       }
-      const entry = pickLineEntry(lines);
-      if (!entry) return null;
+      const { entry, notFound } = pickLineEntry(lines);
+      if (!entry) {
+        if (notFound) {
+          return buildClosedResponse('盘口已关闭（未找到对应盘口）');
+        }
+        return null;
+      }
       const value = side === 'under' ? entry.under : entry.over;
       return buildResponse(value);
     }
@@ -324,8 +399,8 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       if (derived) {
         setOddsPreview({
           odds: derived.odds ?? null,
-          closed: false,
-          message: derived.message,
+	          closed: !!derived.closed,
+	          message: derived.message,
         });
         if (derived.odds !== null) {
           form.setFieldValue('odds', derived.odds);
@@ -414,12 +489,12 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 	          closed: true,
 	          message: msg,
 	        });
-	      } else if (derived) {
-	        setOddsPreview({
-	          odds: derived.odds ?? null,
-	          closed: false,
-	          message: derived.message || '本地盘口赔率（皇冠预览失败）',
-	        });
+      } else if (derived) {
+        setOddsPreview({
+          odds: derived.odds ?? null,
+          closed: !!derived.closed,
+          message: derived.message || '本地盘口赔率（皇冠预览失败）',
+        });
 	        if (derived.odds !== null && derived.odds !== undefined) {
 	          form.setFieldValue('odds', derived.odds);
 	        }
@@ -432,12 +507,12 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 	      if (!silent) {
 	        setPreviewError(msg);
 	      }
-	      if (derived) {
-	        setOddsPreview({
-	          odds: derived.odds ?? null,
-	          closed: false,
-	          message: derived.message || '本地盘口赔率（皇冠预览失败）',
-	        });
+      if (derived) {
+        setOddsPreview({
+          odds: derived.odds ?? null,
+          closed: !!derived.closed,
+          message: derived.message || '本地盘口赔率（皇冠预览失败）',
+        });
 	        if (derived.odds !== null && derived.odds !== undefined) {
 	          form.setFieldValue('odds', derived.odds);
 	        }
@@ -452,25 +527,25 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     }
   }, [match, selectedAccounts, form, defaultSelection, accounts, isAccountOnline, deriveOddsFromMarkets]);
 
-	  // 使用 WSS 推送的盘口数据实时刷新赔率显示：
-	  // 不再轮询调用皇冠预览接口，避免频繁请求 transform.php。
-	  useEffect(() => {
-	    if (!visible || !autoRefreshOdds) return;
-	
-	    const derived = deriveOddsFromMarkets();
-	    if (!derived) return;
-	
-	    setOddsPreview((prev) => ({
-	      odds: derived.odds ?? null,
-	      closed: prev?.closed ?? false,
-	      message: derived.message,
-	      spreadMismatch: prev?.spreadMismatch,
-	    }));
-	
-	    if (derived.odds !== null && derived.odds !== undefined) {
-	      form.setFieldValue('odds', derived.odds);
-	    }
-	  }, [visible, autoRefreshOdds, deriveOddsFromMarkets, form]);
+		  // 使用 WSS 推送的盘口数据实时刷新赔率显示：
+		  // 不再轮询调用皇冠预览接口，避免频繁请求 transform.php。
+		  useEffect(() => {
+		    if (!visible || !autoRefreshOdds) return;
+		
+		    const derived = deriveOddsFromMarkets();
+		    if (!derived) return;
+		
+		    setOddsPreview((prev) => ({
+		      odds: derived.odds ?? null,
+		      closed: derived.closed ?? prev?.closed ?? false,
+		      message: derived.message,
+		      spreadMismatch: prev?.spreadMismatch,
+		    }));
+		
+		    if (derived.odds !== null && derived.odds !== undefined) {
+		      form.setFieldValue('odds', derived.odds);
+		    }
+		  }, [visible, autoRefreshOdds, deriveOddsFromMarkets, form]);
 
   const fetchAutoSelection = useCallback(async (limit?: number, silent = false) => {
     if (!match) return;
@@ -795,8 +870,40 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     return value.toLocaleString();
   };
 
-  return (
-    <Modal
+	  // 弹窗拖拽相关事件，只在桌面端生效
+	  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+	    if (isMobile) return;
+	    const target = e.target as HTMLElement | null;
+	    // 只有按在标题区域（match 信息头部）时才开始拖动
+	    if (!target || !target.closest('.bet-v2-header')) return;
+	    setDragState({
+	      dragging: true,
+	      startX: e.clientX,
+	      startY: e.clientY,
+	      originX: dragOffset.x,
+	      originY: dragOffset.y,
+	    });
+	  };
+
+	  const handleModalMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+	    if (isMobile) return;
+	    if (!dragState.dragging) return;
+	    const deltaX = e.clientX - dragState.startX;
+	    const deltaY = e.clientY - dragState.startY;
+	    setDragOffset({
+	      x: dragState.originX + deltaX,
+	      y: dragState.originY + deltaY,
+	    });
+	  };
+
+	  const handleModalMouseUp = () => {
+	    if (dragState.dragging) {
+	      setDragState(prev => ({ ...prev, dragging: false }));
+	    }
+	  };
+
+	  return (
+	    <Modal
       title={null}
       open={visible}
       onOk={handleSubmit}
@@ -804,8 +911,22 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       confirmLoading={loading}
       width={isMobile ? '100%' : 480}
       style={isMobile ? { top: 0, margin: 0, maxWidth: '100vw', padding: 0 } : undefined}
-      maskClosable={false}
-      className="bet-modal-v2"
+	      maskClosable={false}
+	      className="bet-modal-v2"
+	      modalRender={(origin) => (
+	        <div
+	          onMouseDown={handleModalMouseDown}
+	          onMouseMove={handleModalMouseMove}
+	          onMouseUp={handleModalMouseUp}
+	          onMouseLeave={handleModalMouseUp}
+	          style={{
+	            transform: isMobile ? undefined : `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+	            cursor: !isMobile && dragState.dragging ? 'move' : 'default',
+	          }}
+	        >
+	          {origin}
+	        </div>
+	      )}
       footer={
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={handleCancel} style={{ flex: 1 }}>取消</Button>

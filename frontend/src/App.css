@@ -818,7 +818,9 @@ p {
 
 /* Bet Modal V2 - Compact Design */
 .bet-modal-v2 .ant-modal-body {
-  padding: 12px !important;
+	  padding: 12px !important;
+	  max-height: 70vh;
+	  overflow-y: auto;
 }
 
 .bet-modal-v2 .ant-modal-footer {
@@ -1061,9 +1063,11 @@ p {
     min-height: 100vh;
   }
 
-  .bet-modal-v2 .ant-modal-body {
-    padding: 10px !important;
-  }
+	  .bet-modal-v2 .ant-modal-body {
+	    padding: 10px !important;
+	    max-height: calc(100vh - 120px);
+	    overflow-y: auto;
+	  }
 
   .bet-v2-form .form-grid {
     grid-template-columns: repeat(2, 1fr);
