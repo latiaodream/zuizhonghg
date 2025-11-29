@@ -83,15 +83,15 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const [oddsPreview, setOddsPreview] = useState<{ odds: number | null; closed: boolean; message?: string; spreadMismatch?: boolean } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [autoRefreshOdds, setAutoRefreshOdds] = useState(true); // 自动刷新赔率开关
-	  // 弹窗拖拽相关状态（仅桌面端使用）
-	  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-	  const [dragState, setDragState] = useState<{
-	    dragging: boolean;
-	    startX: number;
-	    startY: number;
-	    originX: number;
-	    originY: number;
-	  }>({ dragging: false, startX: 0, startY: 0, originX: 0, originY: 0 });
+		  // 弹窗拖拽相关状态（仅桌面端使用）
+		  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+		  const [dragState, setDragState] = useState<{
+		    dragging: boolean;
+		    startX: number;
+		    startY: number;
+		    originX: number;
+		    originY: number;
+		  }>({ dragging: false, startX: 0, startY: 0, originX: 0, originY: 0 });
 
   // 监听表单值变化以触发重渲染
   const totalAmount = Form.useWatch('total_amount', form);
@@ -114,13 +114,37 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     return getMatchSnapshot(matchKey) || match;
   }, [matchKey, match, getMatchSnapshot]);
 
-	  // 弹窗关闭时重置拖拽位移
+		  // 弹窗关闭时重置拖拽位移
 	  useEffect(() => {
 	    if (!visible) {
 	      setDragOffset({ x: 0, y: 0 });
 	      setDragState(prev => ({ ...prev, dragging: false, originX: 0, originY: 0, startX: 0, startY: 0 }));
 	    }
 	  }, [visible]);
+
+		  // 判断当前点击是否发生在「可交互控件」上，防止输入/点按钮时误触拖动
+		  const isInteractiveElement = (el: HTMLElement | null): boolean => {
+		    if (!el) return false;
+		    const tag = el.tagName.toLowerCase();
+		    if (['input', 'textarea', 'button', 'select', 'label'].includes(tag)) return true;
+		    if ((el as any).isContentEditable) return true;
+		    const className = (el.className || '').toString();
+		    if (
+		      className.includes('ant-input') ||
+		      className.includes('ant-select') ||
+		      className.includes('ant-picker') ||
+		      className.includes('ant-btn') ||
+		      className.includes('ant-checkbox') ||
+		      className.includes('ant-radio') ||
+		      className.includes('ant-input-number')
+		    ) {
+		      return true;
+		    }
+		    // 递归向上查，直到弹窗根节点
+		    const parent = el.parentElement;
+		    if (!parent) return false;
+		    return isInteractiveElement(parent);
+		  };
 
   const getLineKey = useCallback((accountId: number): string => {
     const meta = autoSelection?.eligible_accounts.find(entry => entry.account.id === accountId)
@@ -455,34 +479,32 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       if (response.success && response.data) {
         const previewData = response.data;
 
-	        // 检查盘口线是否匹配：一旦发现不匹配，直接视为该盘口已变更/关闭，阻止下注
+	        // 检查盘口线是否匹配：
+	        // - 如果盘口线发生变化（spread_mismatch=true），给出明显提示，但不在这里直接拦截下注；
+	        // - 仍然返回皇冠当前赔率，由用户根据提示决定是否继续下注。
 	        if (previewData.spread_mismatch) {
-	          const msg = previewData.message || '盘口已变更或关闭，请重新选择盘口';
+	          const msg = previewData.message || '盘口线已变更，请注意当前盘口线与您选择的不一致';
 	          console.warn('⚠️ Crown API 返回的盘口线与用户选择不匹配 (spread_mismatch=true):', {
 	            requested: previewData.requested_line,
 	            returned: previewData.returned_spread,
 	          });
-	          setOddsPreview({
-	            odds: null,
-	            closed: true,
-	            message: msg,
-	          });
 	          if (!silent) {
 	            setPreviewError(msg);
 	          }
-	          return { success: false, message: msg, data: previewData };
 	        }
 
-        setOddsPreview({
-          odds: previewData.odds ?? null,
-          closed: !!previewData.closed,
-          message: previewData.message,
-        });
-        if (previewData.closed) {
-          setPreviewError(previewData.message || '盘口已封盘或暂时不可投注');
-        } else {
-          setPreviewError(null);
-        }
+	        setOddsPreview({
+	          odds: previewData.odds ?? null,
+	          closed: !!previewData.closed,
+	          message: previewData.message,
+	          spreadMismatch: !!previewData.spread_mismatch,
+	        });
+	        if (previewData.closed) {
+	          setPreviewError(previewData.message || '盘口已封盘或暂时不可投注');
+	        } else if (!previewData.spread_mismatch) {
+	          // 没有封盘、也没有盘口线不匹配时，清空错误提示
+	          setPreviewError(null);
+	        }
         // 更新表单中的赔率
         if (previewData.odds !== null && previewData.odds !== undefined) {
           form.setFieldValue('odds', previewData.odds);
@@ -881,18 +903,23 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     return value.toLocaleString();
   };
 
-		  // 弹窗拖拽相关事件，只在桌面端生效
-		  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-		    if (isMobile) return;
-		    // 桌面端：点击弹窗任意区域按下即可开始拖动
-		    setDragState({
-		      dragging: true,
-		      startX: e.clientX,
-		      startY: e.clientY,
-		      originX: dragOffset.x,
-		      originY: dragOffset.y,
-		    });
-		  };
+			  // 弹窗拖拽相关事件，只在桌面端生效
+			  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+			    if (isMobile) return;
+			    if (e.button !== 0) return; // 仅左键触发拖拽
+			    const target = e.target as HTMLElement | null;
+			    // 如果点在输入框、按钮、选择框等可交互控件上，则不触发拖动，避免输入时误拖
+			    if (target && isInteractiveElement(target)) {
+			      return;
+			    }
+			    setDragState({
+			      dragging: true,
+			      startX: e.clientX,
+			      startY: e.clientY,
+			      originX: dragOffset.x,
+			      originY: dragOffset.y,
+			    });
+			  };
 
 	  const handleModalMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
 	    if (isMobile) return;
