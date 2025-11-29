@@ -210,9 +210,15 @@ export const accountApi = {
       is_enabled: isEnabled
     }).then(res => res.data),
 
-  // 账号优选
-  autoSelect: (params?: { match_id?: number; limit?: number }): Promise<ApiResponse<AccountSelectionResponse>> =>
-    apiClient.get('/accounts/auto-select', { params }).then(res => res.data),
+	  // 账号优选
+	  autoSelect: (params?: {
+	    match_id?: number;
+	    limit?: number;
+	    total_amount?: number;
+	    single_limit?: string | number;
+	    quantity?: number;
+	  }): Promise<ApiResponse<AccountSelectionResponse>> =>
+	    apiClient.get('/accounts/auto-select', { params }).then(res => res.data),
 
   // 获取账号限额
   fetchLimits: (accountId: number): Promise<ApiResponse<{

@@ -6375,10 +6375,109 @@ export class CrownAutomationService {
     this.scheduleFetchWarmup();
   }
 
-  // 公共方法：获取今日注单（占位实现）
+  // 公共方法：获取今日注单（通过纯 API，从 get_today_wagers 解析为 CrownWagerItem）
   async fetchTodayWagers(accountId: number): Promise<CrownWagerItem[]> {
-    console.warn(`⚠️ fetchTodayWagers 方法尚未完整实现 (accountId=${accountId})`);
-    return [];
+    // 先准备 API 客户端（依赖现有的 api_uid + api_cookies 会话）
+    const prepared = await this.prepareApiClient(accountId);
+    if (!prepared.success || !prepared.client) {
+      console.warn(
+        `⚠️ 无法为账号 ${accountId} 准备 API 客户端获取今日注单: ${prepared.message}`
+      );
+      return [];
+    }
+
+    const client = prepared.client;
+    try {
+      const raw = await client.getTodayWagers({ gtype: 'ALL' });
+
+      // 兼容不同结构，尽量找到真正的注单数组
+      let wagersList: any[] = [];
+      if (Array.isArray(raw)) {
+        wagersList = raw;
+      } else if (raw && Array.isArray((raw as any).wagers)) {
+        wagersList = (raw as any).wagers;
+      } else if (raw && Array.isArray((raw as any).data)) {
+        wagersList = (raw as any).data;
+      } else if (raw && Array.isArray((raw as any).list)) {
+        wagersList = (raw as any).list;
+      } else if (raw && typeof raw === 'object') {
+        for (const key of Object.keys(raw)) {
+          const value = (raw as any)[key];
+          if (Array.isArray(value)) {
+            wagersList = value;
+            break;
+          }
+        }
+      }
+
+      if (!wagersList.length) {
+        return [];
+      }
+
+      const items: CrownWagerItem[] = wagersList
+        .map((wager: any): CrownWagerItem | null => {
+          const ticketId = String(wager.w_id || wager.ticket_id || '').trim();
+          if (!ticketId) {
+            return null;
+          }
+
+          const league: string = wager.league || '';
+          const teamH: string = wager.team_h_show || wager.team_h || '';
+          const teamC: string = wager.team_c_show || wager.team_c || '';
+
+          const goldVal =
+            typeof wager.gold === 'number'
+              ? String(wager.gold)
+              : typeof wager.gold === 'string'
+              ? wager.gold
+              : '';
+          const winGoldVal =
+            typeof wager.win_gold === 'number'
+              ? String(wager.win_gold)
+              : typeof wager.win_gold === 'string'
+              ? wager.win_gold
+              : '';
+
+          const resultText: string | undefined =
+            wager.result || wager.bet_team || wager.status || undefined;
+
+          const wagerDate: string | undefined =
+            wager.addtime || wager.adddate || wager.wager_time || undefined;
+
+          const betWtype: string | undefined =
+            wager.wtype || wager.bet_type || undefined;
+
+          return {
+            ticketId,
+            gold: goldVal,
+            winGold: winGoldVal,
+            resultText,
+            score: wager.score,
+            league,
+            teamH,
+            teamC,
+            ballActRet: wager.ball_act_ret || wager.status,
+            ballActClass: wager.ball_act_class,
+            wagerDate,
+            betWtype,
+            rawXml: undefined,
+            normalizedHome: this.normalizeTeamToken(teamH),
+            normalizedAway: this.normalizeTeamToken(teamC),
+            normalizedLeague: this.normalizeTeamToken(league),
+          };
+        })
+        .filter((item): item is CrownWagerItem => item !== null);
+
+      return items;
+    } catch (err: any) {
+      console.error(
+        `❌ 获取账号 ${accountId} 今日注单失败:`,
+        err?.message || String(err)
+      );
+      throw err;
+    } finally {
+      await client.close().catch(() => undefined);
+    }
   }
 
   // 公共方法：获取账号财务摘要

@@ -2,12 +2,17 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { query } from '../models/database';
 import {
-    CrownAccountCreateRequest,
-    ApiResponse,
-    CrownAccount,
-    AccountSelectionResponse,
+	    CrownAccountCreateRequest,
+	    ApiResponse,
+	    CrownAccount,
+	    AccountSelectionResponse,
 } from '../types';
 import { selectAccounts } from '../services/account-selection';
+import {
+	    parseLimitRange,
+	    splitBetsForAccounts,
+	    generateBetQueue,
+} from '../utils/bet-splitter';
 
 const router = Router();
 router.use(authenticateToken);
@@ -22,12 +27,25 @@ const parseOptionalNumber = (value: unknown): number | undefined => {
     return Number.isFinite(num) ? num : undefined;
 };
 
+const getOptionalString = (value: unknown): string | undefined => {
+	if (value === undefined || value === null) {
+	    return undefined;
+	}
+	if (Array.isArray(value)) {
+	    return String(value[0]);
+	}
+	return String(value);
+};
+
 // 账号优选（筛选可用账号）
 router.get('/auto-select', async (req: any, res) => {
     try {
         const userId = req.user.id;
         const matchId = parseOptionalNumber(req.query.match_id);
         const limit = parseOptionalNumber(req.query.limit);
+	        const totalAmount = parseOptionalNumber(req.query.total_amount);
+	        const quantity = parseOptionalNumber(req.query.quantity);
+	        const singleLimitStr = getOptionalString(req.query.single_limit);
 
         if (req.query.match_id !== undefined && matchId === undefined) {
             return res.status(400).json({
@@ -43,7 +61,7 @@ router.get('/auto-select', async (req: any, res) => {
             });
         }
 
-        const selection = await selectAccounts({
+	        let selection = await selectAccounts({
             userId,
             userRole: req.user.role,
             agentId: req.user.agent_id,
@@ -51,10 +69,105 @@ router.get('/auto-select', async (req: any, res) => {
             limit,
         });
 
-        res.json({
-            success: true,
-            data: selection,
-        } as ApiResponse<AccountSelectionResponse>);
+	        // 如果传入了总金额，则基于当前优选结果和拆分规则，进一步按本次下注金额过滤「信用额度不够的账号」
+	        if (totalAmount !== undefined && totalAmount > 0 && selection.eligible_accounts.length > 0) {
+	            const allEligibleIds = selection.eligible_accounts.map((entry) => entry.account.id);
+	            // 按照 quantity 限制实际参与拆分的账号数量（与 /bets 逻辑保持一致）
+	            const quantityValue = quantity && quantity > 0 ? quantity : allEligibleIds.length;
+	            const actualAccountIds = allEligibleIds.slice(0, Math.min(quantityValue, allEligibleIds.length));
+
+	            if (actualAccountIds.length > 0) {
+	                // 读取账号的折扣、限额、信用额度（与 /bets 中保持一致）
+	                const accountsResult = await query(
+	                    'SELECT id, discount, football_prematch_limit, football_live_limit, credit FROM crown_accounts WHERE id = ANY($1)',
+	                    [actualAccountIds],
+	                );
+
+	                const accountDiscounts = new Map<number, number>();
+	                const accountLimits = new Map<number, { min: number; max: number }>();
+	                const accountCredits = new Map<number, number>();
+
+	                for (const row of accountsResult.rows) {
+	                    const accountId = Number(row.id);
+	                    const discount = Number(row.discount) || 1.0;
+	                    accountDiscounts.set(accountId, discount);
+
+	                    const limitValue = Number(row.football_prematch_limit) || Number(row.football_live_limit) || 0;
+	                    if (limitValue > 0) {
+	                        accountLimits.set(accountId, { min: 50, max: limitValue });
+	                    }
+
+	                    if (row.credit !== undefined && row.credit !== null) {
+	                        const credit = Number(row.credit);
+	                        if (!Number.isNaN(credit)) {
+	                            accountCredits.set(accountId, credit);
+	                        }
+	                    }
+	                }
+
+	                const singleLimitRange = parseLimitRange(singleLimitStr);
+
+	                try {
+	                    const betSplits = splitBetsForAccounts({
+	                        totalRealAmount: totalAmount,
+	                        accountIds: actualAccountIds,
+	                        accountDiscounts,
+	                        singleLimitRange: singleLimitRange || undefined,
+	                        accountLimits: singleLimitRange ? undefined : accountLimits,
+	                    });
+
+	                    const betQueue = generateBetQueue(betSplits);
+
+	                    // 按账号统计本次需要的总虚数金额
+	                    const accountVirtualTotals = new Map<number, number>();
+	                    for (const split of betQueue) {
+	                        const prev = accountVirtualTotals.get(split.accountId) || 0;
+	                        accountVirtualTotals.set(split.accountId, prev + split.virtualAmount);
+	                    }
+
+	                    const insufficientCreditAccounts = new Set<number>();
+	                    for (const [accountId, totalVirtual] of accountVirtualTotals.entries()) {
+	                        const credit = accountCredits.get(accountId);
+	                        // 只有当配置了正数信用额度时才做检查（与 /bets 保持一致）
+	                        if (credit !== undefined && credit > 0 && totalVirtual > credit) {
+	                            insufficientCreditAccounts.add(accountId);
+	                        }
+	                    }
+
+	                    if (insufficientCreditAccounts.size > 0) {
+	                        console.warn('⚠️ 账号优选：以下账号本次信用额度不足，将从可下注列表中移除:', Array.from(insufficientCreditAccounts));
+	                    }
+
+	                    // 仅保留本次拆分中且信用额度足够的账号作为 eligible_accounts
+	                    const allowedIdSet = new Set<number>();
+	                    for (const id of actualAccountIds) {
+	                        if (!insufficientCreditAccounts.has(id)) {
+	                            allowedIdSet.add(id);
+	                        }
+	                    }
+
+	                    const filteredEligible = selection.eligible_accounts.filter((entry) => allowedIdSet.has(entry.account.id));
+	                    const movedToExcluded = selection.eligible_accounts.filter((entry) => !allowedIdSet.has(entry.account.id));
+
+	                    selection = {
+	                        ...selection,
+	                        eligible_accounts: filteredEligible,
+	                        excluded_accounts: [...selection.excluded_accounts, ...movedToExcluded],
+	                    };
+	                } catch (error: any) {
+	                    console.error('账号优选拆分金额失败:', error);
+	                    return res.status(400).json({
+	                        success: false,
+	                        error: `金额拆分失败: ${error.message || error}`,
+	                    });
+	                }
+	            }
+	        }
+
+	        res.json({
+	            success: true,
+	            data: selection,
+	        } as ApiResponse<AccountSelectionResponse>);
 
     } catch (error) {
         console.error('账号优选失败:', error);

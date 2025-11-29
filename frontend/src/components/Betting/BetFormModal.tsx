@@ -580,12 +580,32 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 		    }
 		  }, [visible, autoRefreshOdds, deriveOddsFromMarkets, form]);
 
-  const fetchAutoSelection = useCallback(async (limit?: number, silent = false) => {
-    if (!match) return;
+	  const fetchAutoSelection = useCallback(async (limit?: number, silent = false) => {
+	    if (!match) return;
 
-    try {
-      setAutoLoading(true);
-      const response = await accountApi.autoSelect({ match_id: match.id, limit });
+	    try {
+	      setAutoLoading(true);
+	      const params: {
+	        match_id: number;
+	        limit?: number;
+	        total_amount?: number;
+	        single_limit?: string | number;
+	        quantity?: number;
+	      } = { match_id: match.id };
+	      if (typeof limit === 'number') {
+	        params.limit = limit;
+	      }
+	      if (typeof totalAmount === 'number' && totalAmount > 0) {
+	        params.total_amount = totalAmount;
+	      }
+	      if (singleLimit !== undefined && singleLimit !== null && singleLimit !== '') {
+	        params.single_limit = singleLimit as any;
+	      }
+	      if (typeof quantity === 'number' && quantity > 0) {
+	        params.quantity = quantity;
+	      }
+
+	      const response = await accountApi.autoSelect(params);
       if (!response.success || !response.data) {
         if (!silent) {
           message.error(response.error || '优选账号失败');
@@ -609,14 +629,15 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 	        if (!entryOnline) {
 	          return;
 	        }
-	        // 信用额度为 0 或负数的账号，本次也视为「不符合条件」，不参与优选
-	        const entryCreditRaw = (entry.account as any).credit ?? (fallback as any)?.credit;
-	        if (entryCreditRaw !== undefined && entryCreditRaw !== null) {
-	          const entryCredit = Number(entryCreditRaw);
-	          if (!Number.isNaN(entryCredit) && entryCredit <= 0) {
-	            return;
-	          }
-	        }
+        // 信用额度低于皇冠最小下注额 50 的账号，本次视为「不符合条件」，不参与优选
+        const entryCreditRaw = (entry.account as any).credit ?? (fallback as any)?.credit;
+        if (entryCreditRaw !== undefined && entryCreditRaw !== null) {
+          const entryCredit = Number(entryCreditRaw);
+          // 皇冠下注最小 50，信用额度 < 50 的账号，无论怎么拆单都无法真实下注
+          if (!Number.isNaN(entryCredit) && entryCredit < 50) {
+            return;
+          }
+        }
 	        const lineKey = entry.account.line_key || 'UNKNOWN';
 	        if (usedLines.has(lineKey)) {
 	          return;
@@ -653,10 +674,10 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       if (!silent) {
         message.error('优选账号失败');
       }
-    } finally {
-      setAutoLoading(false);
-    }
-  }, [form, match, accountDict, previewOddsRequest, autoRefreshOdds]);
+	    } finally {
+	      setAutoLoading(false);
+	    }
+	  }, [form, match, accountDict, previewOddsRequest, autoRefreshOdds, totalAmount, singleLimit, quantity]);
 
   const matchId = match?.id;
   useEffect(() => {
@@ -912,18 +933,18 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 	      eligibleAccountIds.add(entry.account.id);
 	    });
 	
-	    const eligibleAccounts = accounts.filter(account => {
-	      if (!eligibleAccountIds.has(account.id)) return false;
-	      // 信用额度为 0 或负数的账号，本次也视为不符合条件，不在列表中展示
-	      const creditRaw = (account as any).credit;
-	      if (creditRaw !== undefined && creditRaw !== null) {
-	        const credit = Number(creditRaw);
-	        if (!Number.isNaN(credit) && credit <= 0) {
-	          return false;
-	        }
-	      }
-	      return true;
-	    });
+    const eligibleAccounts = accounts.filter(account => {
+      if (!eligibleAccountIds.has(account.id)) return false;
+      // 信用额度低于 50（皇冠最小下注额）的账号，本次也视为不符合条件，不在列表中展示
+      const creditRaw = (account as any).credit;
+      if (creditRaw !== undefined && creditRaw !== null) {
+        const credit = Number(creditRaw);
+        if (!Number.isNaN(credit) && credit < 50) {
+          return false;
+        }
+      }
+      return true;
+    });
 	
 	    if (!recommendedOrder.length) {
 	      return eligibleAccounts;
