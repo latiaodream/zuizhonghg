@@ -450,25 +450,27 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         setPreviewLoading(false);
       }
     }
-  }, [match, selectedAccounts, form, defaultSelection, accounts, isAccountOnline]);
+  }, [match, selectedAccounts, form, defaultSelection, accounts, isAccountOnline, deriveOddsFromMarkets]);
 
-  // 自动刷新赔率：每 2 秒刷新一次
-  const previewOddsRef = React.useRef(previewOddsRequest);
-  previewOddsRef.current = previewOddsRequest;
-
-  useEffect(() => {
-    if (!visible || !match || !autoRefreshOdds) return;
-
-    // 首次加载时立即获取赔率
-    previewOddsRef.current(true);
-
-    // 设置定时器（每 3 秒刷新一次，减轻皇冠接口压力，角球等盘口可以更多依赖 WSS 本地赔率兜底）
-    const timer = setInterval(() => {
-      previewOddsRef.current(true);
-    }, 3000);
-
-    return () => clearInterval(timer);
-  }, [visible, match, autoRefreshOdds]);
+	  // 使用 WSS 推送的盘口数据实时刷新赔率显示：
+	  // 不再轮询调用皇冠预览接口，避免频繁请求 transform.php。
+	  useEffect(() => {
+	    if (!visible || !autoRefreshOdds) return;
+	
+	    const derived = deriveOddsFromMarkets();
+	    if (!derived) return;
+	
+	    setOddsPreview((prev) => ({
+	      odds: derived.odds ?? null,
+	      closed: prev?.closed ?? false,
+	      message: derived.message,
+	      spreadMismatch: prev?.spreadMismatch,
+	    }));
+	
+	    if (derived.odds !== null && derived.odds !== undefined) {
+	      form.setFieldValue('odds', derived.odds);
+	    }
+	  }, [visible, autoRefreshOdds, deriveOddsFromMarkets, form]);
 
   const fetchAutoSelection = useCallback(async (limit?: number, silent = false) => {
     if (!match) return;
@@ -518,9 +520,12 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       setSelectedAccounts(recommended);
       form.setFieldValue('account_ids', recommended);
       calculatePayout(recommended.length);
-      setTimeout(() => {
-        previewOddsRequest(true);
-      }, 0);
+      // 当启用“自动”实时赔率时，优先依赖 WSS 推送，不主动调皇冠预览
+      if (!autoRefreshOdds) {
+        setTimeout(() => {
+          previewOddsRequest(true);
+        }, 0);
+      }
 
       if (!silent) {
         const baseMsg = `已优选 ${recommended.length} 个在线账号`;
@@ -534,7 +539,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     } finally {
       setAutoLoading(false);
     }
-  }, [form, match, accountDict, previewOddsRequest]);
+  }, [form, match, accountDict, previewOddsRequest, autoRefreshOdds]);
 
   const matchId = match?.id;
   useEffect(() => {
@@ -549,9 +554,12 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     setSelectedAccounts(normalized);
     form.setFieldValue('account_ids', normalized);
     calculatePayout(normalized.length);
-    setTimeout(() => {
-      previewOddsRequest(true);
-    }, 0);
+    // 自动实时赔率开启时，依赖 WSS，不主动请求皇冠预览接口
+    if (!autoRefreshOdds) {
+      setTimeout(() => {
+        previewOddsRequest(true);
+      }, 0);
+    }
   };
 
   const calculatePayout = (accountCountOverride?: number) => {
@@ -565,7 +573,10 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 
   const handleFormValuesChange = () => {
     calculatePayout();
-    previewOddsRequest(true);
+    // 自动实时赔率开启时，赔率展示由 WSS 驱动；关闭时才调用皇冠预览接口
+    if (!autoRefreshOdds) {
+      previewOddsRequest(true);
+    }
   };
 
   const handleModeSwitch = (mode: '优选' | '平均') => {

@@ -344,6 +344,23 @@ const MatchesPage: React.FC = () => {
     });
   }, [matches, search]);
 
+	  // 提供给下注弹窗的比赛快照获取函数：
+	  // 根据 crown_gid / gid / match_id / id 在当前 WSS 实时列表中查找最新数据，
+	  // 确保“实时赔率”能够跟随 WSS 推送更新，而不是停留在打开弹窗时的旧数据。
+	  const getMatchSnapshot = useCallback(
+	    (matchId: string | number | null | undefined) => {
+	      if (!matchId) return null;
+	      const target = String(matchId);
+	      return (
+	        matches.find((m: any) => {
+	          const key = m.crown_gid || m.gid || m.match_id || m.id;
+	          return String(key) === target;
+	        }) || null
+	      );
+	    },
+	    [matches],
+	  );
+
   const openBetModal = (matchData: any, selection: SelectionMeta) => {
     // 自动添加 lid（联赛ID）
     const lid = matchData.lid || matchData.league_id || matchData.raw?.game?.LID || matchData._rawGame?.LID;
@@ -763,7 +780,20 @@ const MatchesPage: React.FC = () => {
           )}
         </Spin>
       </Card>
-      <BetFormModal key={betModalKey} visible={betModalVisible} match={selectedMatch} accounts={accounts} defaultSelection={selectionPreset} onCancel={closeBetModal} onSubmit={async () => { closeBetModal(); await fetchAccounts(true); await loadMatches(); }} />
+	      <BetFormModal
+	        key={betModalKey}
+	        visible={betModalVisible}
+	        match={selectedMatch}
+	        accounts={accounts}
+	        defaultSelection={selectionPreset}
+	        onCancel={closeBetModal}
+	        onSubmit={async () => {
+	          closeBetModal();
+	          await fetchAccounts(true);
+	          await loadMatches();
+	        }}
+	        getMatchSnapshot={getMatchSnapshot}
+	      />
     </div>
   );
 };
