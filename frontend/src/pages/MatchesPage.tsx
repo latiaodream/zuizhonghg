@@ -133,9 +133,17 @@ const MatchesPage: React.FC = () => {
     if (type === 'full_data') {
       const showType = String(data.showType || '').toLowerCase();
       if (showType && showType !== showtype) return;
-      const list = Array.isArray(data.matches) ? data.matches : [];
-      setMatches(list);
-      setLastUpdatedAt(Date.now());
+	      const next = Array.isArray(data.matches) ? data.matches : [];
+	      // 避免 WS 偶发推送空集时把已有赛事列表整体清空，保留上一份非空数据做兜底
+	      setMatches((prev) => {
+	        if (next.length === 0 && prev.length > 0) {
+	          return prev;
+	        }
+	        return next;
+	      });
+	      if (next.length > 0) {
+	        setLastUpdatedAt(Date.now());
+	      }
       return;
     }
 
