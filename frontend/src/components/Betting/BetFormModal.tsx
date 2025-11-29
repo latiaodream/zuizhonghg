@@ -595,26 +595,35 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 
       setAutoSelection(response.data);
 
-      const usedLines = new Set<string>();
-      const recommended: number[] = [];
-      response.data.eligible_accounts.forEach((entry) => {
-        if (entry.flags?.offline) {
-          return;
-        }
-        const fallbackOnline = accountDict.get(entry.account.id)?.is_online;
-        const entryOnline = entry.account.is_online !== undefined
-          ? isTruthy(entry.account.is_online)
-          : isTruthy(fallbackOnline);
-        if (!entryOnline) {
-          return;
-        }
-        const lineKey = entry.account.line_key || 'UNKNOWN';
-        if (usedLines.has(lineKey)) {
-          return;
-        }
-        usedLines.add(lineKey);
-        recommended.push(entry.account.id);
-      });
+	      const usedLines = new Set<string>();
+	      const recommended: number[] = [];
+	      response.data.eligible_accounts.forEach((entry) => {
+	        if (entry.flags?.offline) {
+	          return;
+	        }
+	        const fallback = accountDict.get(entry.account.id);
+	        const fallbackOnline = fallback?.is_online;
+	        const entryOnline = entry.account.is_online !== undefined
+	          ? isTruthy(entry.account.is_online)
+	          : isTruthy(fallbackOnline);
+	        if (!entryOnline) {
+	          return;
+	        }
+	        // 信用额度为 0 或负数的账号，本次也视为「不符合条件」，不参与优选
+	        const entryCreditRaw = (entry.account as any).credit ?? (fallback as any)?.credit;
+	        if (entryCreditRaw !== undefined && entryCreditRaw !== null) {
+	          const entryCredit = Number(entryCreditRaw);
+	          if (!Number.isNaN(entryCredit) && entryCredit <= 0) {
+	            return;
+	          }
+	        }
+	        const lineKey = entry.account.line_key || 'UNKNOWN';
+	        if (usedLines.has(lineKey)) {
+	          return;
+	        }
+	        usedLines.add(lineKey);
+	        recommended.push(entry.account.id);
+	      });
       const skippedCount = response.data.eligible_accounts.length - recommended.length;
       if (recommended.length === 0) {
         setSelectedAccounts([]);
@@ -694,11 +703,19 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     }
   };
 
-  const handleSubmit = async () => {
-    if (!match) return;
+	const handleSubmit = async () => {
+	    if (!match) return;
 
-    try {
-      const values = await form.validateFields();
+	    if (!selectedAccounts.length) {
+	      message.error('当前没有可下注的账号，请先检查账号状态或额度');
+	      return;
+	    }
+
+	    let requestFinished = false;
+	    let timeoutId: number | null = null;
+
+	    try {
+	      const values = await form.validateFields();
 
       const betTypeValue = values.bet_type ?? defaultSelection?.bet_type ?? '让球';
       const betOptionValue = values.bet_option ?? defaultSelection?.bet_option ?? '主队';
@@ -715,28 +732,42 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         usedLines.add(lineKey);
       });
 
-      if (conflictAccounts.length > 0) {
-        const conflictLabels = conflictAccounts
-          .map(id => accounts.find(acc => acc.id === id)?.username || String(id))
-          .join('、');
-        message.error(`所选账号存在同线路冲突：${conflictLabels}。每个线路同场只能下注一次。`);
-        return;
-      }
+	      if (conflictAccounts.length > 0) {
+	        const conflictLabels = conflictAccounts
+	          .map(id => accounts.find(acc => acc.id === id)?.username || String(id))
+	          .join('、');
+	        message.error(`所选账号存在同线路冲突：${conflictLabels}。每个线路同场只能下注一次。`);
+	        return;
+	      }
 
-      setLoading(true);
+	      setLoading(true);
+	      timeoutId = window.setTimeout(() => {
+	        if (!requestFinished) {
+	          setLoading(false);
+	          message.error('下注请求超时，请稍后重试');
+	        }
+	      }, 60000);
 
-      const previewCheck = await previewOddsRequest(true);
-      if (!previewCheck.success) {
-        message.error(previewCheck.message || '获取最新赔率失败，请稍后再试');
-        setLoading(false);
-        return;
-      }
-
-      if (previewCheck.data?.closed) {
-        message.error(previewCheck.data.message || '盘口已封盘或暂时不可投注');
-        setLoading(false);
-        return;
-      }
+	      const previewCheck = await previewOddsRequest(true);
+	      if (!previewCheck.success) {
+	        message.error(previewCheck.message || '获取最新赔率失败，请稍后再试');
+	        requestFinished = true;
+	        if (timeoutId !== null) {
+	          window.clearTimeout(timeoutId);
+	        }
+	        setLoading(false);
+	        return;
+	      }
+	
+	      if (previewCheck.data?.closed) {
+	        message.error(previewCheck.data.message || '盘口已封盘或暂时不可投注');
+	        requestFinished = true;
+	        if (timeoutId !== null) {
+	          window.clearTimeout(timeoutId);
+	        }
+	        setLoading(false);
+	        return;
+	      }
 
       const latestOddsValue = previewCheck.data?.odds;
       const finalOdds = typeof latestOddsValue === 'number' && Number.isFinite(latestOddsValue)
@@ -835,9 +866,13 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         const serverMessage = responseData?.error || responseData?.message || axiosError.message;
         message.error(serverMessage || '创建下注失败');
       }
-    } finally {
-      setLoading(false);
-    }
+	    } finally {
+	      requestFinished = true;
+	      if (timeoutId !== null) {
+	        window.clearTimeout(timeoutId);
+	      }
+	      setLoading(false);
+	    }
   };
 
   const handleCancel = () => {
@@ -864,37 +899,46 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     autoSelection ? autoSelection.eligible_accounts.map(entry => entry.account.id) : []
   ), [autoSelection]);
 
-  const sortedAccounts = useMemo(() => {
-    // 只显示符合下注条件的账号（在线、未达止盈、无线路冲突）
-    // 必须等待后端返回的优选结果，不再使用备用逻辑
-    if (!autoSelection) {
-      // 如果还没有优选数据，返回空数组（等待加载）
-      return [];
-    }
-
-    const eligibleAccountIds = new Set<number>();
-    autoSelection.eligible_accounts.forEach(entry => {
-      eligibleAccountIds.add(entry.account.id);
-    });
-
-    const eligibleAccounts = accounts.filter(account =>
-      eligibleAccountIds.has(account.id)
-    );
-
-    if (!recommendedOrder.length) {
-      return eligibleAccounts;
-    }
-    const orderMap = new Map<number, number>();
-    recommendedOrder.forEach((id, index) => orderMap.set(id, index));
-    return [...eligibleAccounts].sort((a, b) => {
-      const rankA = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.POSITIVE_INFINITY;
-      const rankB = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.POSITIVE_INFINITY;
-      if (rankA !== rankB) {
-        return rankA - rankB;
-      }
-      return a.username.localeCompare(b.username);
-    });
-  }, [accounts, recommendedOrder, autoSelection]);
+	const sortedAccounts = useMemo(() => {
+	    // 只显示符合下注条件的账号（在线、未达止盈、无线路冲突，且信用额度大于 0）
+	    // 必须等待后端返回的优选结果，不再使用备用逻辑
+	    if (!autoSelection) {
+	      // 如果还没有优选数据，返回空数组（等待加载）
+	      return [];
+	    }
+	
+	    const eligibleAccountIds = new Set<number>();
+	    autoSelection.eligible_accounts.forEach(entry => {
+	      eligibleAccountIds.add(entry.account.id);
+	    });
+	
+	    const eligibleAccounts = accounts.filter(account => {
+	      if (!eligibleAccountIds.has(account.id)) return false;
+	      // 信用额度为 0 或负数的账号，本次也视为不符合条件，不在列表中展示
+	      const creditRaw = (account as any).credit;
+	      if (creditRaw !== undefined && creditRaw !== null) {
+	        const credit = Number(creditRaw);
+	        if (!Number.isNaN(credit) && credit <= 0) {
+	          return false;
+	        }
+	      }
+	      return true;
+	    });
+	
+	    if (!recommendedOrder.length) {
+	      return eligibleAccounts;
+	    }
+	    const orderMap = new Map<number, number>();
+	    recommendedOrder.forEach((id, index) => orderMap.set(id, index));
+	    return [...eligibleAccounts].sort((a, b) => {
+	      const rankA = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.POSITIVE_INFINITY;
+	      const rankB = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.POSITIVE_INFINITY;
+	      if (rankA !== rankB) {
+	        return rankA - rankB;
+	      }
+	      return a.username.localeCompare(b.username);
+	    });
+	  }, [accounts, recommendedOrder, autoSelection]);
 
   const formatAmount = (value: number) => {
     if (!Number.isFinite(value)) {
