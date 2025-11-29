@@ -244,10 +244,12 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         return { entry: null, notFound: true };
       }
 
-      const hasExplicitKey =
-        selectionMeta.market_line !== undefined ||
-        selectionMeta.market_index !== undefined ||
-        selectionMeta.spread_gid !== undefined;
+	      // 强标识：能唯一确定某一条盘口线（spread_gid 或盘口线字符串）
+	      const hasStrongKey =
+	        selectionMeta.spread_gid !== undefined ||
+	        selectionMeta.market_line !== undefined;
+	      // 弱标识：仅仅是数组下标（老逻辑场景，只知道第几条）
+	      const hasIndexKey = selectionMeta.market_index !== undefined;
 
       // 1) 优先使用 spread_gid 精确匹配（针对多盘口的副盘口）
       if (selectionMeta.spread_gid) {
@@ -273,16 +275,16 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         }
       }
 
-      // 3) 非角球盘口可以按索引兜底（数组位置未变化的情况）
-      if (!isCornerFull && !isCornerHalf && selectionMeta.market_index !== undefined && Number.isFinite(selectionMeta.market_index)) {
+	      // 3) 当没有强标识（gid/line）时，才允许按索引兜底
+	      if (!isCornerFull && !isCornerHalf && !hasStrongKey && hasIndexKey && Number.isFinite(selectionMeta.market_index)) {
         const idx = selectionMeta.market_index as number;
         if (idx >= 0 && idx < lines.length) {
           return { entry: lines[idx], notFound: false };
         }
       }
 
-      if (hasExplicitKey) {
-        // 用户是从某个具体盘口进来的，但当前盘口列表中已经找不到对应盘口：视为该盘口已关闭
+	      if (hasStrongKey || hasIndexKey) {
+	        // 用户是从某个具体盘口进来的，但当前盘口列表中已经找不到对应盘口：视为该盘口已关闭
         return { entry: null, notFound: true };
       }
 
@@ -309,7 +311,8 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       const ml = scope === 'half'
         ? markets?.half?.moneyline || markets?.half?.moneyLine
         : markets.moneyline || markets.moneyLine;
-      if (!ml) return null;
+	      // 独赢盘只有一条线：如果当前盘口里已经没有这一类独赢盘口了，视为盘口已关闭
+	      if (!ml) return buildClosedResponse('盘口已关闭（未找到对应盘口）');
       const value = side === 'away' ? ml.away : side === 'draw' ? ml.draw : ml.home;
       return buildResponse(value);
     }
@@ -452,15 +455,23 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
       if (response.success && response.data) {
         const previewData = response.data;
 
-        // 检查盘口线是否匹配（仅记录警告，不阻止下注）
-        if (previewData.spread_mismatch) {
-          console.warn('⚠️ Crown API 返回的盘口线与用户选择不匹配:', {
-            requested: previewData.requested_line,
-            returned: previewData.returned_spread,
-          });
-          // 即使盘口线不完全匹配，仍然使用返回的赔率继续下注
-          // 因为皇冠的盘口格式可能与前端显示不同（如 "0 / 0.5" vs "0.25"）
-        }
+	        // 检查盘口线是否匹配：一旦发现不匹配，直接视为该盘口已变更/关闭，阻止下注
+	        if (previewData.spread_mismatch) {
+	          const msg = previewData.message || '盘口已变更或关闭，请重新选择盘口';
+	          console.warn('⚠️ Crown API 返回的盘口线与用户选择不匹配 (spread_mismatch=true):', {
+	            requested: previewData.requested_line,
+	            returned: previewData.returned_spread,
+	          });
+	          setOddsPreview({
+	            odds: null,
+	            closed: true,
+	            message: msg,
+	          });
+	          if (!silent) {
+	            setPreviewError(msg);
+	          }
+	          return { success: false, message: msg, data: previewData };
+	        }
 
         setOddsPreview({
           odds: previewData.odds ?? null,
@@ -873,29 +884,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 		  // 弹窗拖拽相关事件，只在桌面端生效
 		  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
 		    if (isMobile) return;
-		    const target = e.target as HTMLElement | null;
-		    if (!target) return;
-		    // 只要是点击在弹窗内部的“空白区域”即可开始拖动，避免必须点到很窄的标题栏
-		    // 同时排除各种可交互元素，防止影响输入/点击操作
-		    const interactiveSelector = [
-		      'button',
-		      'input',
-		      'textarea',
-		      'select',
-		      'a',
-		      '[role="button"]',
-		      '.ant-input',
-		      '.ant-select',
-		      '.ant-input-number',
-		      '.ant-checkbox',
-		      '.ant-radio',
-		      '.ant-switch',
-		      '.ant-slider',
-		      '.ant-picker',
-		      '.ant-pagination',
-		      '.ant-modal-footer',
-		    ].join(',');
-		    if (target.closest(interactiveSelector)) return;
+		    // 桌面端：点击弹窗任意区域按下即可开始拖动
 		    setDragState({
 		      dragging: true,
 		      startX: e.clientX,
