@@ -788,8 +788,8 @@ router.post('/', async (req: any, res) => {
                     betData.match_id,
                     betData.bet_type,
                     betData.bet_option,
-                    crownAmount,  // 虚数金额
-                    platformAmount,  // 实数金额
+                    platformAmount,  // 实数金额（平台实际扣费）
+                    crownAmount,     // 虚数金额（皇冠下注金额）
                     finalOddsValue,
                     betData.market_category || null,
                     betData.market_scope || null,
@@ -853,9 +853,9 @@ router.post('/', async (req: any, res) => {
                         transactionId,
                         '消耗',
                         `下注消耗 - ${betData.bet_type} ${betData.bet_option}${userRole === 'staff' ? ` (员工: ${req.user.username})` : ''}`,
-                        -crownAmount,
+                        -platformAmount,
                         currentBalance,
-                        currentBalance - crownAmount
+                        currentBalance - platformAmount
                     ]);
                 }
             } catch (accountError: any) {
