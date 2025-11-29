@@ -594,26 +594,35 @@ router.post('/', async (req: any, res) => {
 
         console.log(`📊 下注参数: 总金额=${betData.total_amount}, 账号数=${actualAccountIds.length}, 单笔限额=${betData.single_limit || '自动'}, 间隔=${betData.interval_range || '无'}`);
 
-        // 获取账号信息（折扣、限额）
-        const accountsResult = await query(
-            'SELECT id, discount, football_prematch_limit, football_live_limit FROM crown_accounts WHERE id = ANY($1)',
-            [actualAccountIds]
-        );
+		// 获取账号信息（折扣、限额、信用额度）
+		const accountsResult = await query(
+		    'SELECT id, discount, football_prematch_limit, football_live_limit, credit FROM crown_accounts WHERE id = ANY($1)',
+		    [actualAccountIds]
+		);
 
-        const accountDiscounts = new Map<number, number>();
-        const accountLimits = new Map<number, { min: number; max: number }>();
+		const accountDiscounts = new Map<number, number>();
+		const accountLimits = new Map<number, { min: number; max: number }>();
+		const accountCredits = new Map<number, number>();
 
-        for (const row of accountsResult.rows) {
-            const accountId = Number(row.id);
-            const discount = Number(row.discount) || 1.0;
-            accountDiscounts.set(accountId, discount);
+		for (const row of accountsResult.rows) {
+		    const accountId = Number(row.id);
+		    const discount = Number(row.discount) || 1.0;
+		    accountDiscounts.set(accountId, discount);
 
-            // 使用账号的限额（如果有）
-            const limit = Number(row.football_prematch_limit) || Number(row.football_live_limit) || 0;
-            if (limit > 0) {
-                accountLimits.set(accountId, { min: 50, max: limit });
-            }
-        }
+		    // 使用账号的限额（如果有）
+		    const limit = Number(row.football_prematch_limit) || Number(row.football_live_limit) || 0;
+		    if (limit > 0) {
+		        accountLimits.set(accountId, { min: 50, max: limit });
+		    }
+
+		    // 记录账号信用额度（来自卡片管理的“信用额度”字段）
+		    if (row.credit !== undefined && row.credit !== null) {
+		        const credit = Number(row.credit);
+		        if (!Number.isNaN(credit)) {
+		            accountCredits.set(accountId, credit);
+		        }
+		    }
+		}
 
         // 解析单笔限额范围
         const singleLimitRange = parseLimitRange(betData.single_limit);
@@ -644,13 +653,40 @@ router.post('/', async (req: any, res) => {
             });
         }
 
-        // 生成轮流下注队列
-        const betQueue = generateBetQueue(betSplits);
+		// 生成轮流下注队列
+		const betQueue = generateBetQueue(betSplits);
 
-        console.log(`📋 生成下注队列: 共 ${betQueue.length} 笔`);
-        betQueue.forEach((split, index) => {
-            console.log(`  ${index + 1}. 账号 ${split.accountId}: 虚数 ${split.virtualAmount}, 实数 ${split.realAmount.toFixed(2)}, 折扣 ${split.discount}`);
-        });
+		console.log(`📋 生成下注队列: 共 ${betQueue.length} 笔`);
+		betQueue.forEach((split, index) => {
+		    console.log(`  ${index + 1}. 账号 ${split.accountId}: 虚数 ${split.virtualAmount}, 实数 ${split.realAmount.toFixed(2)}, 折扣 ${split.discount}`);
+		});
+
+		// 按账号统计本次下注需要的总虚数金额，用于和信用额度对比
+		const accountVirtualTotals = new Map<number, number>();
+		for (const split of betQueue) {
+		    const prev = accountVirtualTotals.get(split.accountId) || 0;
+		    accountVirtualTotals.set(split.accountId, prev + split.virtualAmount);
+		}
+
+		// 预先标记信用额度不足的账号
+		const insufficientCreditAccounts = new Map<number, { required: number; credit: number }>();
+		for (const [accountId, totalVirtual] of accountVirtualTotals.entries()) {
+		    const credit = accountCredits.get(accountId);
+		    // 只有当配置了正数信用额度时才做检查
+		    if (credit !== undefined && credit > 0 && totalVirtual > credit) {
+		        insufficientCreditAccounts.set(accountId, { required: totalVirtual, credit });
+		    }
+		}
+
+		if (insufficientCreditAccounts.size > 0) {
+		    console.warn('⚠️ 以下账号信用额度不足，将跳过本次下注:',
+		        Array.from(insufficientCreditAccounts.entries()).map(([id, info]) => ({
+		            accountId: id,
+		            requiredVirtual: info.required,
+		            credit: info.credit,
+		        }))
+		    );
+		}
 
         // 解析间隔时间范围
         const intervalRange = parseIntervalRange(betData.interval_range);
@@ -661,17 +697,33 @@ router.post('/', async (req: any, res) => {
         const failedBets: Array<{ accountId: number; error: string }> = [];
         const verificationWarnings: Array<{ accountId: number; warning: string }> = [];
 
-        // 按队列执行下注
-        for (let i = 0; i < betQueue.length; i++) {
-            const split = betQueue[i];
-            const accountId = split.accountId;
-            const crownAmount = split.virtualAmount;  // 虚数金额
-            const platformAmount = split.realAmount;  // 实数金额
-            const discount = split.discount;
+		// 记录已经因为信用额度不足而报错过的账号，避免重复提示
+		const creditErrorReported = new Set<number>();
 
-            console.log(`\n🎯 执行第 ${i + 1}/${betQueue.length} 笔下注: 账号 ${accountId}, 虚数 ${crownAmount}, 实数 ${platformAmount.toFixed(2)}`);
+		// 按队列执行下注
+		for (let i = 0; i < betQueue.length; i++) {
+		    const split = betQueue[i];
+		    const accountId = split.accountId;
+		    const crownAmount = split.virtualAmount;  // 虚数金额
+		    const platformAmount = split.realAmount;  // 实数金额
+		    const discount = split.discount;
 
-            try {
+		    console.log(`\n🎯 执行第 ${i + 1}/${betQueue.length} 笔下注: 账号 ${accountId}, 虚数 ${crownAmount}, 实数 ${platformAmount.toFixed(2)}`);
+
+		    // 如果该账号本次总虚数超过信用额度，则整账号跳过，不再尝试实际下注
+		    const creditInfo = insufficientCreditAccounts.get(accountId);
+		    if (creditInfo) {
+		        if (!creditErrorReported.has(accountId)) {
+		            creditErrorReported.add(accountId);
+		            failedBets.push({
+		                accountId,
+		                error: `账号信用额度不足：本次下注总虚数 ${creditInfo.required.toFixed(2)} 大于信用额度 ${creditInfo.credit.toFixed(2)}`,
+		            });
+		        }
+		        continue;
+		    }
+
+		    try {
                 // 获取账号完整信息（用于自动登录）
                 const accountResult = await query(
                     'SELECT * FROM crown_accounts WHERE id = $1',

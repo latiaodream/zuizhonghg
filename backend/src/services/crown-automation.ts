@@ -5344,14 +5344,21 @@ export class CrownAutomationService {
 
           try {
             const financial = await this.getAccountFinancialSnapshot(account.id);
-            if (financial.balance !== null) {
+
+            if (financial.balance !== null || financial.credit !== null) {
+              // 登录成功后，如果从页面拿到了余额/信用额度，就一起同步到 crown_accounts
               await query(
                 `UPDATE crown_accounts
-                   SET balance = $1, is_online = true, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $2`,
-                [financial.balance, account.id]
+                   SET balance = COALESCE($1, balance),
+                       credit  = COALESCE($2, credit),
+                       is_online = true,
+                       last_login_at = CURRENT_TIMESTAMP,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $3`,
+                [financial.balance, financial.credit, account.id]
               );
             } else {
+              // 实在拿不到余额/额度，只更新在线状态与时间戳
               await query(
                 `UPDATE crown_accounts
                    SET is_online = true, last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -5360,7 +5367,7 @@ export class CrownAutomationService {
               );
             }
           } catch (balanceError) {
-            console.warn('⚠️ 登录后刷新余额失败（忽略）:', balanceError);
+            console.warn('⚠️ 登录后刷新余额/信用额度失败（忽略）:', balanceError);
           }
         }
 
