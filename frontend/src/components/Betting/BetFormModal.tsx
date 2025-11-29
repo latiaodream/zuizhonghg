@@ -870,20 +870,40 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     return value.toLocaleString();
   };
 
-	  // 弹窗拖拽相关事件，只在桌面端生效
-	  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-	    if (isMobile) return;
-	    const target = e.target as HTMLElement | null;
-	    // 只有按在标题区域（match 信息头部）时才开始拖动
-	    if (!target || !target.closest('.bet-v2-header')) return;
-	    setDragState({
-	      dragging: true,
-	      startX: e.clientX,
-	      startY: e.clientY,
-	      originX: dragOffset.x,
-	      originY: dragOffset.y,
-	    });
-	  };
+		  // 弹窗拖拽相关事件，只在桌面端生效
+		  const handleModalMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+		    if (isMobile) return;
+		    const target = e.target as HTMLElement | null;
+		    if (!target) return;
+		    // 只要是点击在弹窗内部的“空白区域”即可开始拖动，避免必须点到很窄的标题栏
+		    // 同时排除各种可交互元素，防止影响输入/点击操作
+		    const interactiveSelector = [
+		      'button',
+		      'input',
+		      'textarea',
+		      'select',
+		      'a',
+		      '[role="button"]',
+		      '.ant-input',
+		      '.ant-select',
+		      '.ant-input-number',
+		      '.ant-checkbox',
+		      '.ant-radio',
+		      '.ant-switch',
+		      '.ant-slider',
+		      '.ant-picker',
+		      '.ant-pagination',
+		      '.ant-modal-footer',
+		    ].join(',');
+		    if (target.closest(interactiveSelector)) return;
+		    setDragState({
+		      dragging: true,
+		      startX: e.clientX,
+		      startY: e.clientY,
+		      originX: dragOffset.x,
+		      originY: dragOffset.y,
+		    });
+		  };
 
 	  const handleModalMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
 	    if (isMobile) return;
