@@ -689,20 +689,28 @@ router.post('/', async (req: any, res) => {
             });
         }
 
-		// 生成轮流下注队列
-		const betQueue = generateBetQueue(betSplits);
+			// 生成轮流下注队列
+			let betQueue = generateBetQueue(betSplits);
 
-		console.log(`📋 生成下注队列: 共 ${betQueue.length} 笔`);
-		betQueue.forEach((split, index) => {
-		    console.log(`  ${index + 1}. 账号 ${split.accountId}: 虚数 ${split.virtualAmount}, 实数 ${split.realAmount.toFixed(2)}, 折扣 ${split.discount}`);
-		});
+			// 如果传入了单号最大注单数，则对队列做裁剪
+			const maxBetCountRaw = (betData as any).max_bet_count;
+			const maxBetCount = typeof maxBetCountRaw === 'number' ? maxBetCountRaw : Number(maxBetCountRaw);
+			if (Number.isFinite(maxBetCount) && maxBetCount > 0 && betQueue.length > maxBetCount) {
+			    console.log(`✂️ 按照单号最大注单数限制，将本次下注从 ${betQueue.length} 笔裁剪为 ${maxBetCount} 笔`);
+			    betQueue = betQueue.slice(0, maxBetCount);
+			}
 
-		// 按账号统计本次下注需要的总虚数金额，用于和信用额度对比
-		const accountVirtualTotals = new Map<number, number>();
-		for (const split of betQueue) {
-		    const prev = accountVirtualTotals.get(split.accountId) || 0;
-		    accountVirtualTotals.set(split.accountId, prev + split.virtualAmount);
-		}
+			console.log(`📋 生成下注队列: 共 ${betQueue.length} 笔`);
+			betQueue.forEach((split, index) => {
+			    console.log(`  ${index + 1}. 账号 ${split.accountId}: 虚数 ${split.virtualAmount}, 实数 ${split.realAmount.toFixed(2)}, 折扣 ${split.discount}`);
+			});
+
+			// 按账号统计本次下注需要的总虚数金额，用于和信用额度对比
+			const accountVirtualTotals = new Map<number, number>();
+			for (const split of betQueue) {
+			    const prev = accountVirtualTotals.get(split.accountId) || 0;
+			    accountVirtualTotals.set(split.accountId, prev + split.virtualAmount);
+			}
 
 		// 预先标记信用额度不足的账号
 		const insufficientCreditAccounts = new Map<number, { required: number; credit: number }>();

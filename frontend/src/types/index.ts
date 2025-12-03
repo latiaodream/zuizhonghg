@@ -248,6 +248,7 @@ export interface BetCreateRequest {
   single_limit?: string;  // 单笔限额（虚数），格式如 "10000-14000" 或留空
   interval_range?: string;  // 间隔时间范围（秒），格式如 "3-15"
   quantity?: number;  // 参与下注的账号数量
+  max_bet_count?: number;  // 单号最大注单数（本次最多拆出多少笔注单）
   min_odds?: number;  // 最低赔率
   crown_match_id?: string;
   league_name?: string;

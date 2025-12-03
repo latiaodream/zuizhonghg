@@ -76,7 +76,8 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const [selectedAccounts, setSelectedAccounts] = useState<number[]>([]);
   const [estimatedPayout, setEstimatedPayout] = useState(0);
   const [selectionLabel, setSelectionLabel] = useState('');
-  const [betMode, setBetMode] = useState<'优选' | '平均'>('优选');
+  // 下注模式：默认不选，等待用户主动点击
+  const [betMode, setBetMode] = useState<'优选' | '平均' | null>(null);
   const [autoSelection, setAutoSelection] = useState<AccountSelectionResponse | null>(null);
   const [autoLoading, setAutoLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -98,6 +99,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const singleLimit = Form.useWatch('single_limit', form);
   const intervalRange = Form.useWatch('interval_range', form);
   const quantity = Form.useWatch('quantity', form);
+  const maxBetCount = Form.useWatch('max_bet_count', form);
   const minOdds = Form.useWatch('min_odds', form);
 
   const accountDict = useMemo(() => {
@@ -182,6 +184,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         single_limit: undefined,  // 默认为空，使用账号限额
         interval_seconds: 3,
         quantity: 1,
+        max_bet_count: undefined,
         min_odds: defaults.odds,
         total_amount: 100,
         interval_range: '1-3',
@@ -720,6 +723,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
   const handleModeSwitch = (mode: '优选' | '平均') => {
     setBetMode(mode);
     if (mode === '优选') {
+      // 仅在用户主动选择“优选”时才触发优选账号
       fetchAutoSelection(undefined, true);
     }
   };
@@ -814,6 +818,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
         single_limit: values.single_limit,
         interval_range: values.interval_range,
         quantity: values.quantity,
+        max_bet_count: values.max_bet_count,
         min_odds: values.min_odds,
         crown_match_id: match.crown_gid || match.gid || match.match_id,
         league_name: match.league_name,
@@ -898,10 +903,11 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 
   const handleCancel = () => {
     form.resetFields();
-    setSelectedAccounts([]);
-    setEstimatedPayout(0);
-    setSelectionLabel('');
-    setBetMode('优选');
+      setSelectedAccounts([]);
+      setEstimatedPayout(0);
+      setSelectionLabel('');
+      // 关闭弹窗时重置模式为未选择
+      setBetMode(null);
     setAutoSelection(null);
     setAutoLoading(false);
     onCancel();
@@ -1039,7 +1045,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     >
       {match ? (
         <div className="bet-v2">
-          {/* 隐藏字段 */}
+          {/* 隐藏字段（用于统一从 form 取值提交） */}
           <Form form={form} onValuesChange={handleFormValuesChange} style={{ display: 'none' }}>
             <Form.Item name="bet_type"><Input /></Form.Item>
             <Form.Item name="bet_option"><Input /></Form.Item>
@@ -1049,6 +1055,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
             <Form.Item name="single_limit"><Input /></Form.Item>
             <Form.Item name="interval_range"><Input /></Form.Item>
             <Form.Item name="quantity"><InputNumber /></Form.Item>
+            <Form.Item name="max_bet_count"><InputNumber /></Form.Item>
             <Form.Item name="min_odds"><InputNumber /></Form.Item>
           </Form>
 
@@ -1093,36 +1100,45 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
           <div className="bet-v2-form">
             <div className="form-grid">
               <div className="form-cell">
-                <label>总金额</label>
+                <label>总金额(实数)</label>
                 <InputNumber
                   size="small"
                   min={50}
                   style={{ width: '100%' }}
-                  placeholder="50000"
+                  placeholder="例如 50000"
                   value={totalAmount}
                   onChange={(v) => { form.setFieldValue('total_amount', v); handleFormValuesChange(); }}
                 />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  本次实际扣除的金额，按账号折扣自动换算成皇冠金额（虚数）
+                </div>
               </div>
               <div className="form-cell">
-                <label>单笔限额</label>
+                <label>单笔限额(虚数)</label>
                 <Input
                   size="small"
-                  placeholder="留空自动"
+                  placeholder="例如 10000-14000，留空自动"
                   value={singleLimit}
                   onChange={(e) => form.setFieldValue('single_limit', e.target.value)}
                 />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  每一注在皇冠那边的金额范围（虚数）；留空则按账号自身限额
+                </div>
               </div>
               <div className="form-cell">
-                <label>间隔(秒)</label>
+                <label>间隔时间(秒)</label>
                 <Input
                   size="small"
-                  placeholder="3-15"
+                  placeholder="例如 3-15"
                   value={intervalRange}
                   onChange={(e) => form.setFieldValue('interval_range', e.target.value)}
                 />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  每一笔下注之间随机等待的秒数范围
+                </div>
               </div>
               <div className="form-cell">
-                <label>数量</label>
+                <label>账号数量</label>
                 <InputNumber
                   size="small"
                   min={1}
@@ -1131,6 +1147,24 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
                   value={quantity}
                   onChange={(v) => form.setFieldValue('quantity', v)}
                 />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  本次最多有多少个账号参与下注（不超过实际可用账号数）
+                </div>
+              </div>
+              <div className="form-cell">
+                <label>单号最大注单数</label>
+                <InputNumber
+                  size="small"
+                  min={1}
+                  max={999}
+                  style={{ width: '100%' }}
+                  placeholder="可选"
+                  value={maxBetCount}
+                  onChange={(v) => form.setFieldValue('max_bet_count', v)}
+                />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  本次订单最多拆成多少笔注单，多出的部分将不再下注
+                </div>
               </div>
               <div className="form-cell">
                 <label>最低赔率</label>
@@ -1139,10 +1173,13 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
                   min={0}
                   step={0.01}
                   style={{ width: '100%' }}
-                  placeholder="可选"
+                  placeholder="可选，低于此数不下注"
                   value={minOdds}
                   onChange={(v) => form.setFieldValue('min_odds', v)}
                 />
+                <div style={{ marginTop: 2, fontSize: 11, color: '#999' }}>
+                  实时赔率低于这里填写的数值时，本次下注会被跳过
+                </div>
               </div>
               <div className="form-cell">
                 <label>模式</label>
@@ -1177,9 +1214,13 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
                 <div style={{ padding: '12px', textAlign: 'center', color: '#999', fontSize: 12 }}>
                   <Spin size="small" /> 加载中...
                 </div>
+              ) : !autoSelection ? (
+                <div style={{ padding: '12px', textAlign: 'center', color: '#999', fontSize: 12 }}>
+                  请先在上方选择模式并点击「优选」，系统会自动筛选可下注账号
+                </div>
               ) : sortedAccounts.length === 0 ? (
                 <div style={{ padding: '12px', textAlign: 'center', color: '#999', fontSize: 12 }}>
-                  暂无可下注的账号
+                  当前无符合条件的在线账号
                 </div>
               ) : (
                 sortedAccounts.map(account => {
