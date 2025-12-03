@@ -72,16 +72,23 @@ apiClient.interceptors.request.use(
 
 // 响应拦截器 - 处理错误
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+	  (response: AxiosResponse) => response,
+	  (error) => {
+	    const status = error.response?.status;
+	    if (status === 401) {
+	      const requestUrl = (error.config?.url as string) || '';
+	      const isAuthLogin = requestUrl.includes('/auth/login');
+	      // 登录接口的 401 交给各自页面处理，不强制重定向；
+	      // 其它接口的 401 认为是登录态失效，清理本地并跳转登录页
+	      if (!isAuthLogin) {
+	        localStorage.removeItem('token');
+	        localStorage.removeItem('user');
+	        window.location.href = '/login';
+	      }
+	    }
+	    return Promise.reject(error);
+	  }
+	);
 
 // 认证API
 export const authApi = {
