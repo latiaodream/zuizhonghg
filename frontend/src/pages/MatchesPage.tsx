@@ -419,16 +419,32 @@ const MatchesPage: React.FC = () => {
             <Empty description="暂无赛事" />
           ) : (
             <div className="matches-table-container">
-              {filtered.map((m: any, idx: number) => {
-                const leagueLabel = manualName(m.league ?? m.league_name, '未识别联赛');
-                const homeLabel = manualName(m.home ?? m.home_team, '-');
-                const awayLabel = manualName(m.away ?? m.away_team, '-');
-                // 优先使用 retimeset（如 "2H^93:26"），否则用 period/clock
-                const retimeset = m.retimeset || m.RETIMESET || '';
-                const period = retimeset || m.period || m.match_period || '';
-                const clock = retimeset || m.clock || '';
-                const scoreLabel = m.score || m.current_score || '';
-	                const markets = m.markets || {};
+	              {filtered.map((m: any, idx: number) => {
+	                const leagueLabel = manualName(m.league ?? m.league_name, '未识别联赛');
+	                const homeLabel = manualName(m.home ?? m.home_team, '-');
+	                const awayLabel = manualName(m.away ?? m.away_team, '-');
+	                // 比分：优先使用 WSS 推送的 home_score / away_score，其次兼容旧的 score / current_score
+	                const homeScoreRaw = m.home_score ?? m.homeScore;
+	                const awayScoreRaw = m.away_score ?? m.awayScore;
+	                let scoreLabel = '';
+	                if (homeScoreRaw !== undefined || awayScoreRaw !== undefined) {
+	                  const homeScoreNum = Number(homeScoreRaw);
+	                  const awayScoreNum = Number(awayScoreRaw);
+	                  if (Number.isFinite(homeScoreNum) || Number.isFinite(awayScoreNum)) {
+	                    const homeScore = Number.isFinite(homeScoreNum) ? homeScoreNum : 0;
+	                    const awayScore = Number.isFinite(awayScoreNum) ? awayScoreNum : 0;
+	                    scoreLabel = `${homeScore}-${awayScore}`;
+	                  }
+	                }
+	                if (!scoreLabel) {
+	                  scoreLabel = m.score || m.current_score || '';
+	                }
+	                // 实时时间：滚球优先使用 live_status（如 "2H^93:26"），否则兼容旧字段 period/clock/retimeset
+	                const retimeset = m.retimeset || m.RETIMESET || '';
+	                const period = retimeset || m.period || m.match_period || '';
+	                const clock = retimeset || m.clock || '';
+	                const liveStatus = (m.live_status || m.liveStatus || '') as string;
+		                const markets = m.markets || {};
 
 	                // 从 moreMarkets.game[] 提取盘口线并带上 gid
 	                const extractLinesFromMoreMarkets = (moreMarkets: any) => {
@@ -570,28 +586,37 @@ const MatchesPage: React.FC = () => {
 	                // 半场盘口 = 普通 + 角球
 	                const halfHdp = [...halfHdpBase, ...cornerHalfHdp];
 	                const halfOu = [...halfOuBase, ...cornerHalfOu];
-                const fullMl = markets.moneyline || markets.full?.moneyline || {};
-                const halfMl = markets.half?.moneyline || {};
+	                const fullMl = markets.moneyline || markets.full?.moneyline || {};
+	                const halfMl = markets.half?.moneyline || {};
 
-                const liveClock = buildLiveClock(period, clock);
-                let displayTime = liveClock;
-                if (!displayTime) {
-                  // 非滚球：只显示时间 HH:mm
-                  const rawTime = m.time || '';
-                  if (rawTime) {
-                    // 如果已有时间格式如 "07:00" 或 "11-26 07:00"，提取时间部分
-                    const timeMatch = rawTime.match(/(\d{1,2}:\d{2})/);
-                    displayTime = timeMatch ? timeMatch[1] : rawTime;
-                  } else if (m.match_time) {
-                    try {
-                      const date = new Date(m.match_time);
-                      const chinaTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-                      const hours = String(chinaTime.getUTCHours()).padStart(2, '0');
-                      const minutes = String(chinaTime.getUTCMinutes()).padStart(2, '0');
-                      displayTime = `${hours}:${minutes}`;
-                    } catch { displayTime = ''; }
-                  }
-                }
+	                let displayTime = '';
+	                if (showtype === 'live') {
+	                  // 滚球：优先展示 live_status 原始字符串，例如 "2H^55:35" / "MTIME^HT"
+	                  const status = (liveStatus || '').toString().trim();
+	                  if (status) {
+	                    displayTime = status;
+	                  } else {
+	                    const liveClock = buildLiveClock(period, clock);
+	                    displayTime = liveClock;
+	                  }
+	                }
+	                if (!displayTime) {
+	                  // 非滚球或没有实时状态时：只显示开赛时间 HH:mm
+	                  const rawTime = m.time || '';
+	                  if (rawTime) {
+	                    // 如果已有时间格式如 "07:00" 或 "11-26 07:00"，提取时间部分
+	                    const timeMatch = rawTime.match(/(\d{1,2}:\d{2})/);
+	                    displayTime = timeMatch ? timeMatch[1] : rawTime;
+	                  } else if (m.match_time) {
+	                    try {
+	                      const date = new Date(m.match_time);
+	                      const chinaTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+	                      const hours = String(chinaTime.getUTCHours()).padStart(2, '0');
+	                      const minutes = String(chinaTime.getUTCMinutes()).padStart(2, '0');
+	                      displayTime = `${hours}:${minutes}`;
+	                    } catch { displayTime = ''; }
+	                  }
+	                }
 
                     return (
                       <div key={`${m.gid}-${idx}`} className="match-block">
