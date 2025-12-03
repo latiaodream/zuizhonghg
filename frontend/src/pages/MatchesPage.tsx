@@ -1,12 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Select, Button, Input, message, Empty, Typography, Spin } from 'antd';
-import { accountApi, crownApi } from '../services/api';
-import { ReloadOutlined } from '@ant-design/icons';
+import { Card, Select, Input, message, Empty, Spin } from 'antd';
+import { accountApi } from '../services/api';
 import BetFormModal, { type SelectionMeta, type MarketScope } from '../components/Betting/BetFormModal';
 import type { CrownAccount, Match as MatchType } from '../types';
 import dayjs from 'dayjs';
-
-const { Title } = Typography;
 
 // Helper functions (omitted for brevity but kept in actual implementation)
 const manualName = (value: string | null | undefined, fallback: string): string => {
@@ -88,7 +85,7 @@ const convertMatch = (matchData: any, showType: 'live' | 'today' | 'early'): Mat
 const MatchesPage: React.FC = () => {
   const [showtype, setShowtype] = useState<'live' | 'today' | 'early'>('live');
   const [gtype, setGtype] = useState<'ft' | 'bk'>('ft');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [betModalVisible, setBetModalVisible] = useState(false);
@@ -133,17 +130,18 @@ const MatchesPage: React.FC = () => {
     if (type === 'full_data') {
       const showType = String(data.showType || '').toLowerCase();
       if (showType && showType !== showtype) return;
-	      const next = Array.isArray(data.matches) ? data.matches : [];
-	      // 避免 WS 偶发推送空集时把已有赛事列表整体清空，保留上一份非空数据做兜底
-	      setMatches((prev) => {
-	        if (next.length === 0 && prev.length > 0) {
-	          return prev;
-	        }
-	        return next;
-	      });
-	      if (next.length > 0) {
-	        setLastUpdatedAt(Date.now());
-	      }
+      setLoading(false);
+      const next = Array.isArray(data.matches) ? data.matches : [];
+      // 避免 WS 偶发推送空集时把已有赛事列表整体清空，保留上一份非空数据做兜底
+      setMatches((prev) => {
+        if (next.length === 0 && prev.length > 0) {
+          return prev;
+        }
+        return next;
+      });
+      if (next.length > 0) {
+        setLastUpdatedAt(Date.now());
+      }
       return;
     }
 
@@ -156,6 +154,7 @@ const MatchesPage: React.FC = () => {
       const gid = match.gid ?? data.gid ?? match.match_id;
       if (!gid) return;
 
+      setLoading(false);
       setMatches((prev) => {
         const idx = prev.findIndex((m: any) => (m.gid ?? m.match_id) === gid);
         if (idx === -1) {
@@ -180,6 +179,7 @@ const MatchesPage: React.FC = () => {
       if (showType && showType !== showtype) return;
       const gid = data.gid;
       if (!gid) return;
+      setLoading(false);
       setMatches((prev) => prev.filter((m: any) => (m.gid ?? m.match_id) !== gid));
       setLastUpdatedAt(Date.now());
       return;
@@ -276,34 +276,15 @@ const MatchesPage: React.FC = () => {
   }, [showtype, handleWsMessage]);
 
   const loadMatches = async () => {
-    setLoading(true);
-    try {
-      const res = await crownApi.getMatchesSystem({
-        gtype,
-        showtype,
-        rtype: showtype === 'live' ? 'rb' : 'r',
-        ltype: '3',
-        sorttype: 'L',
-      });
-			if (res.success && res.data) {
-				const next = res.data.matches || [];
-				// 避免接口偶发读到空集把现有列表“清零”，保留上一份非空数据做兜底
-				setMatches((prev) => {
-					if (next.length === 0 && prev.length > 0) {
-						return prev;
-					}
-					return next;
-				});
-				setLastUpdatedAt(Date.now());
-			}
-    } catch (error) {
-      message.error('加载赛事失败');
-    } finally {
-      setLoading(false);
-    }
+    // 纯 WSS 模式下，不再通过 HTTP 接口抓取赛事列表。
+    // 保留占位函数以兼容历史代码中的调用（例如下注后刷新），避免编译告警。
+    return;
   };
 
   useEffect(() => {
+    // 每次 showtype / gtype 变化时，重新进入“等待 WSS 首帧数据”的 loading 状态
+    setLoading(true);
+
     // 优先尝试读取本地缓存，避免刷新页面时列表瞬间变成 0 场
     try {
       const key = buildCacheKey(gtype, showtype);
@@ -312,6 +293,10 @@ const MatchesPage: React.FC = () => {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.matches)) {
           setMatches(parsed.matches);
+          if (parsed.matches.length > 0) {
+            // 有缓存的情况下可以立即展示，不必等待 WSS
+            setLoading(false);
+          }
         }
         if (parsed.lastUpdatedAt) {
           setLastUpdatedAt(parsed.lastUpdatedAt);
@@ -320,12 +305,6 @@ const MatchesPage: React.FC = () => {
     } catch {
       // 读缓存失败忽略
     }
-
-    // WSS 作为主数据源，API 只在首次加载时调用一次作为初始数据
-    loadMatches();
-    // 不再轮询 API，完全依赖 WSS 推送
-    // const interval = setInterval(loadMatches, 10000);
-    // return () => clearInterval(interval);
   }, [showtype, gtype]);
 
   // 每次获得新的非空赛事列表时，写入 localStorage，做简单持久化
@@ -798,7 +777,6 @@ const MatchesPage: React.FC = () => {
 	        onSubmit={async () => {
 	          closeBetModal();
 	          await fetchAccounts(true);
-	          await loadMatches();
 	        }}
 	        getMatchSnapshot={getMatchSnapshot}
 	      />
