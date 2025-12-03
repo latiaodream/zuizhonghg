@@ -732,10 +732,41 @@ router.post('/', async (req: any, res) => {
 		    );
 		}
 
-        // 解析间隔时间范围
-        const intervalRange = parseIntervalRange(betData.interval_range);
+	        // 解析间隔时间范围
+	        const intervalRange = parseIntervalRange(betData.interval_range);
 
-        const automation = getCrownAutomation();
+	        // 构建后台任务参数，交由异步任务处理
+	        const jobParams: BetJobParams = {
+	            userId,
+	            userRole,
+	            agentId,
+	            username: req.user?.username,
+	            betData,
+	            matchRecord,
+	            resolvedCrownMatchId,
+	            betQueue,
+	            intervalRange,
+	            insufficientCreditAccounts,
+	            validatedAccountIds,
+	            actualAccountIds,
+	        };
+
+	        // 异步执行下注逻辑，不阻塞当前 HTTP 请求
+	        processBetJob(jobParams).catch((err) => {
+	            console.error('后台下注任务执行失败:', err);
+	        });
+
+	        const totalRequested = validatedAccountIds.length;
+	        return res.status(202).json({
+	            success: true,
+	            data: {
+	                total: totalRequested,
+	                queued: betQueue.length,
+	            },
+	            message: `下注任务已提交，正在后台处理中。本次共选择 ${totalRequested} 个账号，计划拆分 ${betQueue.length} 笔下注。`,
+	        } as ApiResponse);
+
+	        const automation = getCrownAutomation();
         const createdBets: Array<{ record: any; crown_result: any; accountId: number; match: any }> = [];
         const verifiableBets: Array<{ record: any; crown_result: any; accountId: number; match: any }> = [];
         const failedBets: Array<{ accountId: number; error: string }> = [];
@@ -1070,14 +1101,340 @@ router.post('/', async (req: any, res) => {
                 : `全部下注失败 (${failCount}/${totalRequested})`
         } as ApiResponse);
 
-    } catch (error) {
-        console.error('创建下注记录错误:', error);
-        res.status(500).json({
-            success: false,
-            error: '创建下注记录失败'
-        });
-    }
-});
+	    } catch (error) {
+	        console.error('创建下注记录错误:', error);
+	        res.status(500).json({
+	            success: false,
+	            error: '创建下注记录失败'
+	        });
+	    }
+	});
+
+// 后台异步下注任务参数
+interface BetJobParams {
+	userId: number;
+	userRole: string;
+	agentId?: number | null;
+	username?: string;
+	betData: BetCreateRequest;
+	matchRecord: any;
+	resolvedCrownMatchId?: string | null;
+	betQueue: { accountId: number; virtualAmount: number; realAmount: number; discount: number }[];
+	intervalRange: { min: number; max: number } | null;
+	insufficientCreditAccounts: Map<number, { required: number; credit: number }>;
+	validatedAccountIds: number[];
+	actualAccountIds: number[];
+}
+
+// 在后台执行真实下注逻辑（登录、下单、记录流水、匹配官网注单等）
+async function processBetJob(params: BetJobParams): Promise<void> {
+	const {
+		userId,
+		userRole,
+		agentId,
+		username,
+		betData,
+		matchRecord,
+		resolvedCrownMatchId,
+		betQueue,
+		intervalRange,
+		insufficientCreditAccounts,
+		validatedAccountIds,
+		actualAccountIds,
+	} = params;
+
+	if (!betQueue.length) {
+		console.log('[后台下注任务] betQueue 为空，直接结束');
+		return;
+	}
+
+	console.log(`\n[后台下注任务] 开始执行，用户 ${userId}，角色 ${userRole}，队列长度 ${betQueue.length}`);
+
+	const automation = getCrownAutomation();
+	const createdBets: Array<{ record: any; crown_result: any; accountId: number; match: any }> = [];
+	const verifiableBets: Array<{ record: any; crown_result: any; accountId: number; match: any }> = [];
+	const failedBets: Array<{ accountId: number; error: string }> = [];
+	const verificationWarnings: Array<{ accountId: number; warning: string }> = [];
+
+	// 记录已经因为信用额度不足而报错过的账号，避免重复提示
+	const creditErrorReported = new Set<number>();
+
+	for (let i = 0; i < betQueue.length; i++) {
+		const split = betQueue[i];
+		const accountId = split.accountId;
+		const crownAmount = split.virtualAmount; // 虚数金额
+		const platformAmount = split.realAmount; // 实数金额
+		const discount = split.discount;
+
+		console.log(`\n[后台下注任务] 执行第 ${i + 1}/${betQueue.length} 笔: 账号 ${accountId}, 虚数 ${crownAmount}, 实数 ${platformAmount.toFixed(2)}`);
+
+		// 如果该账号本次总虚数超过信用额度，则整账号跳过，不再尝试实际下注
+		const creditInfo = insufficientCreditAccounts.get(accountId);
+		if (creditInfo) {
+			if (!creditErrorReported.has(accountId)) {
+				creditErrorReported.add(accountId);
+				failedBets.push({
+					accountId,
+					error: `账号信用额度不足：本次下注总虚数 ${creditInfo.required.toFixed(2)} 大于信用额度 ${creditInfo.credit.toFixed(2)}`,
+				});
+			}
+			continue;
+		}
+
+		try {
+			// 获取账号完整信息（用于自动登录）
+			const accountResult = await query('SELECT * FROM crown_accounts WHERE id = $1', [accountId]);
+			if (accountResult.rows.length === 0) {
+				failedBets.push({ accountId, error: '账号不存在或已被删除' });
+				continue;
+			}
+
+			const accountRow = accountResult.rows[0] as CrownAccount;
+
+			// 确保账号会话可用，必要时自动登录
+			if (!automation.isAccountOnline(accountId)) {
+				console.log(`[后台下注任务] 账号 ${accountId} 未登录，尝试自动登录...`);
+				const loginAttempt = await automation.loginAccountWithApi(accountRow);
+				if (!loginAttempt.success) {
+					failedBets.push({
+						accountId,
+						error: loginAttempt.message || '账号登录失败',
+					});
+
+					await query(
+						`UPDATE crown_accounts
+						 SET is_online = false,
+						     status = 'error',
+						     error_message = $2,
+						     updated_at = CURRENT_TIMESTAMP
+						 WHERE id = $1`,
+						[accountId, (loginAttempt.message || '登录失败').slice(0, 255)],
+					).catch((err) => {
+						console.warn('[后台下注任务] 更新账号状态失败:', err);
+					});
+
+					continue;
+				}
+			}
+
+			// 检查最低赔率
+			const minOddsThreshold = Number(betData.min_odds);
+			if (Number.isFinite(minOddsThreshold) && minOddsThreshold > 0) {
+				const compareOdds = Number(betData.odds);
+				if (!Number.isFinite(compareOdds) || compareOdds < minOddsThreshold) {
+					failedBets.push({
+						accountId,
+						error: `实时赔率 ${Number.isFinite(compareOdds) ? compareOdds.toFixed(3) : '--'} 低于最低赔率 ${minOddsThreshold}`,
+					});
+					continue;
+				}
+			}
+
+			// 调用真实的 Crown 下注 API
+			const betResult = await automation.placeBet(accountId, {
+				betType: betData.bet_type,
+				betOption: betData.bet_option,
+				amount: crownAmount,
+				odds: betData.odds,
+				platformAmount,
+				discount,
+				match_id: betData.match_id,
+				matchId: betData.match_id,
+				crown_match_id: resolvedCrownMatchId,
+				crownMatchId: resolvedCrownMatchId,
+				league_name: betData.league_name || matchRecord.league_name,
+				leagueName: betData.league_name || matchRecord.league_name,
+				home_team: betData.home_team || matchRecord.home_team,
+				homeTeam: betData.home_team || matchRecord.home_team,
+				away_team: betData.away_team || matchRecord.away_team,
+				awayTeam: betData.away_team || matchRecord.away_team,
+				market_category: betData.market_category,
+				marketCategory: betData.market_category,
+				market_scope: betData.market_scope,
+				marketScope: betData.market_scope,
+				market_side: betData.market_side,
+				marketSide: betData.market_side,
+				market_line: betData.market_line,
+				marketLine: betData.market_line,
+				market_index: betData.market_index,
+				marketIndex: betData.market_index,
+				market_wtype: betData.market_wtype,
+				marketWtype: betData.market_wtype,
+				market_rtype: betData.market_rtype,
+				marketRtype: betData.market_rtype,
+				market_chose_team: betData.market_chose_team,
+				marketChoseTeam: betData.market_chose_team,
+				spread_gid: betData.spread_gid,
+				spreadGid: betData.spread_gid,
+			});
+
+			const initialStatus = betResult.success ? 'confirmed' : 'cancelled';
+			const errorMessage = betResult.success ? null : betResult.message || '下注失败';
+			if (!betResult.success && errorMessage) {
+				console.warn(`[后台下注任务] 账号 ${accountId} 下注返回失败: ${errorMessage}`);
+			}
+
+			const finalOddsValue = betResult.actualOdds || betData.odds;
+			const insertResult = await query(
+				`INSERT INTO bets (
+				     user_id, account_id, match_id, bet_type, bet_option, bet_amount, virtual_bet_amount, odds,
+				     market_category, market_scope, market_side, market_line, market_index,
+				     single_limit, interval_seconds, quantity, status, official_bet_id, official_odds, score, error_message
+				 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+				 RETURNING *`,
+				[
+					userId,
+					accountId,
+					betData.match_id,
+					betData.bet_type,
+					betData.bet_option,
+					platformAmount,
+					crownAmount,
+					finalOddsValue,
+					betData.market_category || null,
+					betData.market_scope || null,
+					betData.market_side || null,
+					betData.market_line || null,
+					Number.isFinite(betData.market_index as any) ? Number(betData.market_index) : null,
+					betData.single_limit || null,
+					intervalRange ? Math.round((intervalRange.min + intervalRange.max) / 2) : 3,
+					betData.quantity || actualAccountIds.length,
+					initialStatus,
+					betResult.betId || null,
+					finalOddsValue,
+					betData.current_score || matchRecord.current_score || null,
+					errorMessage,
+				],
+			);
+
+			const createdRecord = insertResult.rows[0];
+			const payload = { record: createdRecord, crown_result: betResult, accountId, match: matchRecord };
+			createdBets.push(payload);
+			if (betResult.success) {
+				verifiableBets.push(payload);
+			} else {
+				failedBets.push({ accountId, error: betResult.message || '下注失败' });
+			}
+
+			// 创建金币流水记录(消耗) - 仅当下注成功时
+			if (betResult.success) {
+				const transactionId = `BET${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
+				const chargeUserId = userRole === 'staff' && agentId ? agentId : userId;
+
+				const balanceResult = await query(
+					'SELECT COALESCE(SUM(amount), 0) as balance FROM coin_transactions WHERE user_id = $1',
+					[chargeUserId],
+				);
+				const currentBalance = parseFloat(balanceResult.rows[0].balance);
+
+				await query(
+					`INSERT INTO coin_transactions (
+					     user_id, account_id, bet_id, transaction_id, transaction_type,
+					     description, amount, balance_before, balance_after
+					 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					[
+						chargeUserId,
+						accountId,
+						createdRecord.id,
+						transactionId,
+						'消耗',
+						`下注消耗 - ${betData.bet_type} ${betData.bet_option}${
+							userRole === 'staff' && username ? ` (员工: ${username})` : ''
+						}`,
+						-platformAmount,
+						currentBalance,
+						currentBalance - platformAmount,
+					],
+				);
+			}
+		} catch (accountError: any) {
+			console.error(`[后台下注任务] 账号 ${accountId} 下注失败:`, accountError);
+			failedBets.push({ accountId, error: accountError.message || '下注失败' });
+		}
+
+		// 如果不是最后一笔，等待随机间隔时间
+		if (i < betQueue.length - 1 && intervalRange) {
+			const waitSeconds = generateRandomInterval(intervalRange as any);
+			console.log(`[后台下注任务] 等待 ${waitSeconds.toFixed(1)} 秒后执行下一笔...`);
+			await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+		}
+	}
+
+	// 官网注单匹配
+	for (const created of verifiableBets) {
+		const betRecord = created.record;
+		const betResult = created.crown_result;
+		const matchInfo = created.match || {};
+
+		if (!automation.isAccountOnline(created.accountId)) {
+			verificationWarnings.push({
+				accountId: created.accountId,
+				warning: '下注完成后账号离线，无法匹配官网注单',
+			});
+			continue;
+		}
+
+		let matchedWager: any = null;
+		const maxAttempts = 3;
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			const wagers = await automation.fetchTodayWagers(created.accountId).catch(() => null);
+			if (wagers && wagers.length > 0) {
+				matchedWager = betResult.betId
+					? wagers.find((item: any) => item.ticketId === betResult.betId) || null
+					: null;
+
+				if (!matchedWager) {
+					matchedWager = automation.findMatchingWager(
+						wagers,
+						matchInfo.league_name || matchInfo.leagueName || null,
+						matchInfo.home_team || matchInfo.homeTeam || null,
+						matchInfo.away_team || matchInfo.awayTeam || null,
+					);
+				}
+			}
+
+			if (matchedWager) break;
+			if (attempt < maxAttempts - 1) {
+				await new Promise((resolve) => setTimeout(resolve, 600));
+			}
+		}
+
+		if (!matchedWager) {
+			const reason = betResult.message || '官网未找到对应注单';
+			verificationWarnings.push({ accountId: created.accountId, warning: reason });
+			continue;
+		}
+
+		const ticketId = String(matchedWager.ticketId || '').trim();
+		if (!ticketId) {
+			verificationWarnings.push({ accountId: created.accountId, warning: '官网注单号为空' });
+			continue;
+		}
+
+		await query(
+			`UPDATE bets SET
+			     status = 'confirmed',
+			     official_bet_id = $1,
+			     updated_at = CURRENT_TIMESTAMP
+			 WHERE id = $2`,
+			[ticketId, betRecord.id],
+		);
+
+		created.record = { ...betRecord, status: 'confirmed', official_bet_id: ticketId };
+	}
+
+	const totalRequested = validatedAccountIds.length;
+	const successCount = createdBets.filter((entry) => entry.record.status === 'confirmed').length;
+	const failCount = failedBets.length;
+
+	console.log(
+		`[后台下注任务完成] 总账号=${totalRequested}, 成功=${successCount}, 失败=${failCount},` +
+			` 实际生成注单=${createdBets.length}, 待验证=${verifiableBets.length}`,
+	);
+	if (verificationWarnings.length) {
+		console.log('[后台下注任务] 官网匹配警告:', verificationWarnings);
+	}
+}
 
 // 同步结算结果
 router.post('/sync-settlements', async (req: any, res) => {
