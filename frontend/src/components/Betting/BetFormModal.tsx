@@ -160,39 +160,39 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
     return base ? base.slice(0, 4).toUpperCase() : 'UNKNOWN';
   }, [accounts, autoSelection]);
 
-  useEffect(() => {
-    if (visible && match) {
-      form.resetFields();
-      setSelectedAccounts([]);
-      setEstimatedPayout(0);
-      const defaults = {
-        bet_type: defaultSelection?.bet_type || '让球',
-        bet_option: defaultSelection?.bet_option || '主队',
-        odds: defaultSelection?.odds || 1.85,
-      };
-      setSelectionLabel(defaultSelection?.label || '');
-      setAutoSelection(null);
-      setAutoLoading(false);
-      setOddsPreview(null);
-      setPreviewError(null);
-      // 设置默认值
-      form.setFieldsValue({
-        bet_type: defaults.bet_type,
-        bet_option: defaults.bet_option,
-        bet_amount: 100,
-        odds: defaults.odds,
-        single_limit: undefined,  // 默认为空，使用账号限额
-        interval_seconds: 3,
-        quantity: 1,
-        max_bet_count: undefined,
-        min_odds: defaults.odds,
-        total_amount: 100,
-        interval_range: '1-3',
-        group: undefined,
-        account_ids: [],
-      });
-    }
-  }, [visible, match, form, defaultSelection]);
+	  useEffect(() => {
+	    if (visible && match) {
+	      form.resetFields();
+	      setSelectedAccounts([]);
+	      setEstimatedPayout(0);
+	      const defaults = {
+	        bet_type: defaultSelection?.bet_type || '让球',
+	        bet_option: defaultSelection?.bet_option || '主队',
+	        odds: defaultSelection?.odds || 1.85,
+	      };
+	      setSelectionLabel(defaultSelection?.label || '');
+	      setAutoSelection(null);
+	      setAutoLoading(false);
+	      setOddsPreview(null);
+	      setPreviewError(null);
+	      // 设置默认值
+	      form.setFieldsValue({
+	        bet_type: defaults.bet_type,
+	        bet_option: defaults.bet_option,
+	        bet_amount: 100,
+	        odds: defaults.odds,
+	        single_limit: undefined,  // 默认为空，使用账号限额
+	        interval_seconds: 3,
+	        quantity: 1,
+	        max_bet_count: 5,
+	        min_odds: defaults.odds,
+	        total_amount: 100,
+	        interval_range: '1-3',
+	        group: undefined,
+	        account_ids: [],
+	      });
+	    }
+	  }, [visible, match, form, defaultSelection]);
 
   const isTruthy = (value: any): boolean => {
     if (typeof value === 'boolean') return value;
@@ -682,13 +682,7 @@ const BetFormModal: React.FC<BetFormModalProps> = ({
 	    }
 	  }, [form, match, accountDict, previewOddsRequest, autoRefreshOdds, totalAmount, singleLimit, quantity]);
 
-  const matchId = match?.id;
-  useEffect(() => {
-    if (!visible || !matchId) return;
-    // 弹窗打开时自动优选账号（静默模式，不显示提示）
-    fetchAutoSelection(undefined, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, matchId]);
+	  // 不在弹窗打开时自动优选账号，改为仅在用户点击「优选」模式时触发 fetchAutoSelection
 
   const handleAccountsChange = (accountIds: Array<number | string>) => {
     const normalized = accountIds.map(id => Number(id));
