@@ -524,14 +524,44 @@ router.post('/', async (req: any, res) => {
 	    	    ownershipSql += ` AND user_id = $2`;
 	    	    ownershipParams.push(userId);
 	    	}
-        const ownershipResult = await query(ownershipSql, ownershipParams);
+	        const ownershipResult = await query(ownershipSql, ownershipParams);
 
-        if (ownershipResult.rows.length !== betData.account_ids.length) {
-            return res.status(400).json({
-                success: false,
-                error: '部分账号不存在或已禁用'
-            });
-        }
+	        // 允许前端传入的账号列表里包含一些无权限/已禁用账号：
+	        //  在这里做一次交集过滤，只保留当前用户真实可操作的账号，避免整单失败。
+	        const ownedIdSet = new Set(ownershipResult.rows.map((row: any) => Number(row.id)));
+	        const originalAccountIds = betData.account_ids.map((id: any) => Number(id));
+	        const filteredAccountIds = originalAccountIds.filter(id => ownedIdSet.has(id));
+
+	        if (filteredAccountIds.length === 0) {
+	            console.warn('❌ 下注失败：所选账号均无权限或已禁用', {
+	                userId,
+	                userRole,
+	                agentId,
+	                originalAccountIds,
+	                ownedIds: Array.from(ownedIdSet),
+	                ownershipSql,
+	                ownershipParams,
+	            });
+	            return res.status(400).json({
+	                success: false,
+	                error: '所选账号均不可用或无权限'
+	            });
+	        }
+
+	        if (filteredAccountIds.length !== originalAccountIds.length) {
+	            const missingIds = originalAccountIds.filter(id => !ownedIdSet.has(id));
+	            console.warn('⚠️ 下注账号归属校验：部分账号被过滤', {
+	                userId,
+	                userRole,
+	                agentId,
+	                originalAccountIds,
+	                filteredAccountIds,
+	                missingIds,
+	            });
+	        }
+
+	        // 用过滤后的账号列表继续后续逻辑
+	        betData.account_ids = filteredAccountIds;
 
         const eligibleMap = new Map<number, AccountSelectionEntry>();
         const excludedMap = new Map<number, AccountSelectionEntry>();
