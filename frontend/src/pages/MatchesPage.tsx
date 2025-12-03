@@ -593,26 +593,54 @@ const MatchesPage: React.FC = () => {
                   }
                 }
 
-                return (
-                  <div key={`${m.gid}-${idx}`} className="match-block">
-                    {/* Left: Home Team */}
-                    <div className="team-col team-home">{homeLabel}</div>
+                    return (
+                      <div key={`${m.gid}-${idx}`} className="match-block">
+                        {/* Left: Home Team */}
+                        <div className="team-col team-home">{homeLabel}</div>
 
-                    {/* Center: Match Info + Markets */}
-                    <div className="match-center-block">
-                      {/* Match Info Header */}
-                      <div className="match-info-header">
-                        <span className="league-name">{leagueLabel}</span>
-                        {isMobile && (
-                          <div className="mobile-teams-row">
-                            <span className="mobile-team-home">{homeLabel}</span>
-                            <span className="mobile-score">{scoreLabel || 'vs'}</span>
-                            <span className="mobile-team-away">{awayLabel}</span>
+                        {/* Center: Match Info + Markets */}
+                        <div className="match-center-block">
+                          {/* Match Info Header */}
+                          <div className={`match-info-header ${showtype === 'live' ? 'live-style' : ''}`}>
+                            {showtype === 'live' ? (
+                              <>
+                                <div className="live-top-row">
+                                  <span className="league-name">{leagueLabel}</span>
+                                  {scoreLabel && (
+                                    <span className="live-score">({scoreLabel})</span>
+                                  )}
+                                </div>
+                                {displayTime && (
+                                  <div className="live-time-row">
+                                    {/* 这里直接使用原始的滚球时间字符串，例如 2H^55:35 / MTIME^HT */}
+                                    <span className="live-time">{displayTime}</span>
+                                  </div>
+                                )}
+                                {isMobile && (
+                                  <div className="mobile-teams-row">
+                                    <span className="mobile-team-home">{homeLabel}</span>
+                                    <span className="mobile-score">{scoreLabel || 'vs'}</span>
+                                    <span className="mobile-team-away">{awayLabel}</span>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <span className="league-name">{leagueLabel}</span>
+                                {isMobile && (
+                                  <div className="mobile-teams-row">
+                                    <span className="mobile-team-home">{homeLabel}</span>
+                                    <span className="mobile-score">{scoreLabel || 'vs'}</span>
+                                    <span className="mobile-team-away">{awayLabel}</span>
+                                  </div>
+                                )}
+                                {!isMobile && scoreLabel && (
+                                  <span className="score-display">({scoreLabel})</span>
+                                )}
+                                <span className="time-display">{displayTime}</span>
+                              </>
+                            )}
                           </div>
-                        )}
-                        {!isMobile && scoreLabel && <span className="score-display">({scoreLabel})</span>}
-                        <span className="time-display">{displayTime}</span>
-                      </div>
 
                       {/* Markets Grid - Horizontal Layout */}
                       <div className="markets-grid">

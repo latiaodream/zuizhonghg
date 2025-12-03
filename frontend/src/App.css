@@ -430,6 +430,19 @@ p {
   flex-wrap: wrap;
 }
 
+/* Live (滚球) header: show "联赛名(比分)" + 原始时间字符串（例如 2H^55:35 / MTIME^HT） */
+.match-info-header.live-style {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.match-info-header .live-top-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .match-info-header .league-name {
   color: #3B82F6;
   font-weight: 600;
@@ -441,6 +454,19 @@ p {
 }
 
 .match-info-header .time-display {
+  color: #64748B;
+}
+
+.match-info-header .live-score {
+  color: #DC2626;
+  font-weight: 700;
+}
+
+.match-info-header .live-time-row {
+  margin-top: 2px;
+}
+
+.match-info-header .live-time {
   color: #64748B;
 }
 
