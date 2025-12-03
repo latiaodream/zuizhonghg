@@ -502,22 +502,28 @@ router.post('/', async (req: any, res) => {
         betData.match_id = matchDbId;
         const resolvedCrownMatchId = matchRecord.match_id || crownMatchId;
 
-        // 验证账号归属范围，并记录账号所属用户
-        let ownershipSql = `
-            SELECT id, user_id
-            FROM crown_accounts
-            WHERE id = ANY($1) AND is_enabled = true
-        `;
-        const ownershipParams: any[] = [betData.account_ids];
-        if (userRole === 'admin') {
-            // 管理员：允许操作任意启用账号
-        } else if (userRole === 'agent') {
-            ownershipSql += ` AND (user_id = $2 OR user_id IN (SELECT id FROM users WHERE agent_id = $2))`;
-            ownershipParams.push(userId);
-        } else {
-            ownershipSql += ` AND user_id = $2`;
-            ownershipParams.push(userId);
-        }
+	    	// 验证账号归属范围，并记录账号所属用户
+	    	let ownershipSql = `
+	    	    SELECT id, user_id
+	    	    FROM crown_accounts
+	    	    WHERE id = ANY($1) AND is_enabled = true
+	    	`;
+	    	const ownershipParams: any[] = [betData.account_ids];
+	    	if (userRole === 'admin') {
+	    	    // 管理员：允许操作任意启用账号
+	    	} else if (userRole === 'agent') {
+	    	    // 代理：自己创建的账号 + 自己名下员工创建的账号
+	    	    ownershipSql += ` AND (user_id = $2 OR user_id IN (SELECT id FROM users WHERE agent_id = $2))`;
+	    	    ownershipParams.push(userId);
+	    	} else if (userRole === 'staff' && agentId) {
+	    	    // 员工：共享同一代理下的所有账号（与账号优选/账号列表逻辑保持一致）
+	    	    ownershipSql += ` AND agent_id = $2`;
+	    	    ownershipParams.push(agentId);
+	    	} else {
+	    	    // 兜底：仅允许操作自己名下账号
+	    	    ownershipSql += ` AND user_id = $2`;
+	    	    ownershipParams.push(userId);
+	    	}
         const ownershipResult = await query(ownershipSql, ownershipParams);
 
         if (ownershipResult.rows.length !== betData.account_ids.length) {
