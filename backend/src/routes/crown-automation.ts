@@ -1990,48 +1990,71 @@ router.post('/matches/sync/:accountId', async (req: any, res) => {
             return isNaN(d.getTime()) ? null : d.toISOString();
         };
 
-        let upserted = 0;
-        for (const m of matches || []) {
-            const match_id = String(m.gid || '').trim();
-            if (!match_id) continue;
-            const league = (m.league || '').toString().slice(0, 200);
-            const home = (m.home || '').toString().slice(0, 100);
-            const away = (m.away || '').toString().slice(0, 100);
-            const when = parseTime(m.time) || new Date().toISOString();
-            const status = String(showtype) === 'live' ? 'live' : 'scheduled';
-            const current_score = (m.score || '').toString().slice(0, 20);
-            const match_period = [m.period, m.clock].filter(Boolean).join(' ');
-            const markets = JSON.stringify(m.markets || {});
+	    let upserted = 0;
+	    for (const m of matches || []) {
+	        const match_id = String(m.gid || '').trim();
+	        if (!match_id) continue;
+	        const league = (m.league || '').toString().slice(0, 200);
+	        const home = (m.home || '').toString().slice(0, 100);
+	        const away = (m.away || '').toString().slice(0, 100);
+	        const when = parseTime(m.time) || new Date().toISOString();
+	        const status = String(showtype) === 'live' ? 'live' : 'scheduled';
+	        const current_score = (m.score || '').toString().slice(0, 20);
+	        const match_period = [m.period, m.clock].filter(Boolean).join(' ');
+	        const markets = JSON.stringify(m.markets || {});
+	
+	        const result = await query(
+	            `INSERT INTO matches (match_id, league_name, home_team, away_team, match_time, status, current_score, match_period, markets, last_synced_at, created_at, updated_at)
+	             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+	             ON CONFLICT (match_id) DO UPDATE SET
+	               league_name = EXCLUDED.league_name,
+	               home_team = EXCLUDED.home_team,
+	               away_team = EXCLUDED.away_team,
+	               match_time = EXCLUDED.match_time,
+	               status = EXCLUDED.status,
+	               current_score = EXCLUDED.current_score,
+	               match_period = EXCLUDED.match_period,
+	               markets = EXCLUDED.markets,
+	               last_synced_at = CURRENT_TIMESTAMP,
+	               updated_at = CURRENT_TIMESTAMP
+	             RETURNING id` ,
+	            [match_id, league, home, away, when, status, current_score, match_period, markets]
+	        );
+	        const matchDbId = result.rows[0]?.id;
+	        if (matchDbId) {
+	            await query(
+	                `INSERT INTO match_odds_history (match_id, markets)
+	                 VALUES ($1, $2)`,
+	                [matchDbId, markets]
+	            );
+	        }
+	        upserted += 1;
+	    }
 
-            const result = await query(
-                `INSERT INTO matches (match_id, league_name, home_team, away_team, match_time, status, current_score, match_period, markets, last_synced_at, created_at, updated_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-                 ON CONFLICT (match_id) DO UPDATE SET
-                   league_name = EXCLUDED.league_name,
-                   home_team = EXCLUDED.home_team,
-                   away_team = EXCLUDED.away_team,
-                   match_time = EXCLUDED.match_time,
-                   status = EXCLUDED.status,
-                   current_score = EXCLUDED.current_score,
-                   match_period = EXCLUDED.match_period,
-                   markets = EXCLUDED.markets,
-                   last_synced_at = CURRENT_TIMESTAMP,
-                   updated_at = CURRENT_TIMESTAMP
-                 RETURNING id` ,
-                [match_id, league, home, away, when, status, current_score, match_period, markets]
-            );
-            const matchDbId = result.rows[0]?.id;
-            if (matchDbId) {
-                await query(
-                    `INSERT INTO match_odds_history (match_id, markets)
-                     VALUES ($1, $2)`,
-                    [matchDbId, markets]
-                );
-            }
-            upserted += 1;
-        }
+	    // 自动清理过期的滚球赛事，避免后台长期显示已经结束的 live 比赛
+	    try {
+	        // 只在抓取滚球(showtype=live)时执行清理逻辑
+	        if (String(showtype) === 'live') {
+	            const cleanupResult = await query(
+	                `UPDATE matches
+	                   SET status = 'finished',
+	                       updated_at = CURRENT_TIMESTAMP
+	                 WHERE status = 'live'
+	                   AND (
+	                     match_time < NOW() - INTERVAL '1 day'
+	                     OR (last_synced_at IS NOT NULL AND last_synced_at < NOW() - INTERVAL '1 day')
+	                   )`
+	            );
+	            const cleaned = cleanupResult.rowCount || 0;
+	            if (cleaned > 0) {
+	                console.log(`🧹 自动将 ${cleaned} 条过期滚球赛事标记为 finished`);
+	            }
+	        }
+	    } catch (cleanupError) {
+	        console.error('自动清理过期 live 赛事失败:', cleanupError);
+	    }
 
-        res.json({ success: true, message: `已同步 ${upserted} 条赛事到本地` });
+	    res.json({ success: true, message: `已同步 ${upserted} 条赛事到本地` });
     } catch (error) {
         console.error('同步赛事错误:', error);
         res.status(500).json({ success: false, error: '同步赛事失败' });
